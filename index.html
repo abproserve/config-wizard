@@ -3217,41 +3217,94 @@
         const drData = stepData["cat-10"] || {};
         if (drData.orgName) {
           const drWb = XLSX.utils.book_new();
+
+          // Title row
+          const titleRow = ["Digital Room Template"];
+
+          // Empty spacer rows
+          const emptyRow = [];
+
+          // Header row matching the original template
           const headers = [
+            "", // spacer column
             "Customer Organization Name",
-            "Customer Logo",
+            "Customer Logo (Insert Logo in space below)",
             "Type of Digital Room",
             "AB Ingress Point",
-            "Messaging to Buyers",
-            "Messaging to Administrators",
+            "Messaging to Buyers (Delete messages that do not apply)",
+            "Messaging to Administrators (Delete messages that do not apply)",
             "Account Executive Contact Information",
             "Customer Admin Contact Information"
           ];
-          const buyerMsgs = [drData.buyerMsg1, drData.buyerMsg2, drData.buyerMsg3, drData.buyerMsg4].filter(Boolean).join("\n\n");
-          const adminMsgs = [drData.adminMsg1, drData.adminMsg2, drData.adminMsg3, drData.adminMsg4].filter(Boolean).join("\n\n");
+
+          // AE and Admin contact info
           const aeContact = [drData.aeName, drData.aeEmail, drData.aePhone].filter(Boolean).join("\n");
           const custContact = [drData.adminName, drData.adminEmail, drData.adminPhone].filter(Boolean).join("\n");
-          const row = [
+
+          // Main data row with first messages
+          const dataRow = [
+            "",
             drData.orgName || "",
-            drData.logoDataUrl ? "(Logo attached)" : "",
-            drData.roomType || "",
+            "", // Logo placeholder
+            drData.roomType || "Buyer Resource Hub",
             drData.ingressPoint || "",
-            buyerMsgs,
-            adminMsgs,
+            drData.buyerMsg1 || "",
+            drData.adminMsg1 || "",
             aeContact,
             custContact
           ];
-          const drWsData = [headers, row];
-          const drWs = XLSX.utils.aoa_to_sheet(drWsData);
-          drWs["!cols"] = [
-            { wch: 30 }, { wch: 25 }, { wch: 22 }, { wch: 18 },
-            { wch: 60 }, { wch: 60 }, { wch: 30 }, { wch: 30 }
+
+          // Additional message rows (messages 2, 3, 4)
+          const msgRows = [];
+          const buyerMsgs = [drData.buyerMsg2, drData.buyerMsg3, drData.buyerMsg4];
+          const adminMsgs = [drData.adminMsg2, drData.adminMsg3, drData.adminMsg4];
+          for (let m = 0; m < 3; m++) {
+            if (buyerMsgs[m] || adminMsgs[m]) {
+              const mRow = ["", "", "", "", "", buyerMsgs[m] || "", adminMsgs[m] || "", "", ""];
+              msgRows.push(mRow);
+            }
+          }
+
+          const wsData = [
+            titleRow,
+            emptyRow,
+            emptyRow,
+            emptyRow,
+            emptyRow,
+            headers,
+            dataRow,
+            ...msgRows
           ];
-          // Set row heights for message cells
-          drWs["!rows"] = [{}, { hpt: 120 }];
-          XLSX.utils.book_append_sheet(drWb, drWs, "Digital Room Template");
+
+          const drWs = XLSX.utils.aoa_to_sheet(wsData);
+
+          // Column widths matching template
+          drWs["!cols"] = [
+            { wch: 3 },  // spacer
+            { wch: 28 }, // Org Name
+            { wch: 35 }, // Logo
+            { wch: 20 }, // Room Type
+            { wch: 18 }, // Ingress
+            { wch: 55 }, // Buyer Messaging
+            { wch: 55 }, // Admin Messaging
+            { wch: 30 }, // AE Contact
+            { wch: 30 }  // Customer Admin Contact
+          ];
+
+          // Row heights — taller for message rows
+          const rowHeights = [{hpt: 24}, {}, {}, {}, {}, {hpt: 30}];
+          for (let r = 0; r < msgRows.length + 1; r++) {
+            rowHeights.push({ hpt: 80 });
+          }
+          drWs["!rows"] = rowHeights;
+
+          // Merge title row across all columns
+          drWs["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }];
+
+          XLSX.utils.book_append_sheet(drWb, drWs, "Sheet1");
+
           const drFilename = safeName + "_DigitalRoom_" + ts + ".xlsx";
-          setTimeout(() => XLSX.writeFile(drWb, drFilename), 500);
+          setTimeout(function() { XLSX.writeFile(drWb, drFilename); }, 800);
         }
       }
     }
