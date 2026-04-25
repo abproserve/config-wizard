@@ -1,0 +1,3104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Amazon Business | Configuration Wizard</title>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <style>
+    /* ========================================================
+       CSS — Amazon Business Configuration Wizard
+       Responsive: 768px – 1920px
+       Color palette: Navy #232F3E, Orange #E47911, White #FFF
+       Min touch target: 44×44px, Min body text: 14px
+       ======================================================== */
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      color: #232F3E;
+      background: #F5F5F5;
+      min-width: 768px;
+    }
+
+    /* — Header — */
+    .wizard-header {
+      background: #232F3E;
+      color: #FFFFFF;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .wizard-header .brand {
+      font-size: 18px;
+      font-weight: 700;
+      color: #E47911;
+    }
+    .wizard-header .brand span {
+      color: #FFFFFF;
+      font-weight: 400;
+    }
+
+    /* — Progress Indicator — */
+    .progress-bar {
+      background: #FFFFFF;
+      border-bottom: 1px solid #DDD;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 0;
+      overflow-x: auto;
+    }
+    .progress-step {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 13px;
+      cursor: default;
+      min-height: 44px;
+      min-width: 44px;
+      justify-content: center;
+      user-select: none;
+    }
+    .progress-step.completed {
+      color: #067D62;
+      cursor: pointer;
+    }
+    .progress-step.completed:hover { background: #E8F5E9; }
+    .progress-step.current {
+      color: #E47911;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .progress-step.current:hover { background: #FFF3E0; }
+    .progress-step.future {
+      color: #999;
+    }
+    .progress-connector {
+      width: 24px;
+      height: 2px;
+      background: #DDD;
+      flex-shrink: 0;
+    }
+    .progress-connector.completed-line { background: #067D62; }
+
+    /* — Content Area — */
+    .wizard-content {
+      max-width: 960px;
+      margin: 24px auto;
+      padding: 0 24px;
+    }
+    .step-card {
+      background: #FFFFFF;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      padding: 32px;
+    }
+    .step-card h2 {
+      font-size: 22px;
+      margin-bottom: 8px;
+      color: #232F3E;
+    }
+    .step-card .step-description {
+      color: #555;
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+
+    /* — Form Elements — */
+    .form-group {
+      margin-bottom: 18px;
+    }
+    .form-group label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 4px;
+      font-size: 14px;
+    }
+    .form-group label .required {
+      color: #D13212;
+      margin-left: 2px;
+    }
+    .form-group input[type="text"],
+    .form-group input[type="email"],
+    .form-group select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #CCC;
+      border-radius: 4px;
+      font-size: 14px;
+      min-height: 44px;
+      transition: border-color 0.2s;
+    }
+    .form-group input:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: #E47911;
+      box-shadow: 0 0 0 2px rgba(228,121,17,0.15);
+    }
+    .form-group .error-msg {
+      color: #D13212;
+      font-size: 13px;
+      margin-top: 4px;
+      display: none;
+    }
+    .form-group.has-error input,
+    .form-group.has-error select {
+      border-color: #D13212;
+    }
+    .form-group.has-error .error-msg {
+      display: block;
+    }
+
+    /* — Buttons — */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      min-width: 44px;
+      padding: 10px 24px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.2s;
+    }
+    .btn-primary {
+      background: #E47911;
+      color: #FFFFFF;
+    }
+    .btn-primary:hover { background: #C76A0E; }
+    .btn-primary:disabled { background: #E4791180; cursor: not-allowed; }
+    .btn-secondary {
+      background: #E0E0E0;
+      color: #232F3E;
+    }
+    .btn-secondary:hover { background: #D0D0D0; }
+    .btn-secondary:disabled { background: #F0F0F0; color: #AAA; cursor: not-allowed; }
+    .btn-sm {
+      min-height: 36px;
+      padding: 6px 16px;
+      font-size: 13px;
+    }
+    .btn-danger {
+      background: #D13212;
+      color: #FFFFFF;
+    }
+    .btn-danger:hover { background: #B02A0F; }
+
+    /* — Footer Navigation — */
+    .wizard-footer {
+      max-width: 960px;
+      margin: 0 auto 32px;
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* — Group Structure — */
+    .group-rows { margin-top: 8px; }
+    .group-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .group-row input { flex: 1; }
+    .group-row .full-path {
+      flex: 1.5;
+      color: #555;
+      font-size: 13px;
+      padding: 10px 12px;
+      background: #F9F9F9;
+      border: 1px solid #EEE;
+      border-radius: 4px;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+    }
+    .group-row .btn-remove {
+      background: none;
+      border: none;
+      color: #D13212;
+      cursor: pointer;
+      font-size: 18px;
+      min-width: 44px;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+    }
+    .group-row .btn-remove:hover { background: #FDE8E8; }
+
+    /* — Category Selector — */
+    .category-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .category-card {
+      border: 2px solid #E0E0E0;
+      border-radius: 8px;
+      padding: 14px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      min-height: 44px;
+    }
+    .category-card:hover { border-color: #E47911; background: #FFF9F0; }
+    .category-card.selected { border-color: #E47911; background: #FFF3E0; }
+    .category-card input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      margin-top: 2px;
+      accent-color: #E47911;
+      flex-shrink: 0;
+    }
+    .category-card .cat-icon { font-size: 22px; flex-shrink: 0; }
+    .category-card .cat-info { flex: 1; }
+    .category-card .cat-name { font-weight: 600; font-size: 14px; }
+    .category-card .cat-desc { font-size: 12px; color: #666; margin-top: 2px; }
+
+    /* — Modal — */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal-box {
+      background: #FFFFFF;
+      border-radius: 8px;
+      padding: 32px;
+      max-width: 440px;
+      width: 90%;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+      text-align: center;
+    }
+    .modal-box h3 { font-size: 18px; margin-bottom: 12px; }
+    .modal-box p { color: #555; margin-bottom: 24px; font-size: 14px; }
+    .modal-box .modal-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+    }
+
+    /* — Multi-Group Assignment Panel — */
+    .mga-panel {
+      background: #F9F9F9;
+      border: 1px solid #E0E0E0;
+      border-radius: 6px;
+      padding: 12px;
+      margin-top: 6px;
+    }
+    .mga-panel .mga-add-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .mga-panel .mga-add-row select {
+      padding: 6px 8px;
+      border: 1px solid #CCC;
+      border-radius: 4px;
+      font-size: 13px;
+      min-height: 32px;
+    }
+    .mga-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #E8F5E9;
+      border: 1px solid #C8E6C9;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 12px;
+      margin: 2px 4px 2px 0;
+    }
+    .mga-tag .mga-remove {
+      background: none;
+      border: none;
+      color: #D13212;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 0 2px;
+      line-height: 1;
+    }
+    .mga-tag .mga-remove:hover { color: #B02A0F; }
+
+    /* — Responsive — */
+    @media (max-width: 960px) {
+      .wizard-content, .wizard-footer { padding: 0 16px; }
+      .step-card { padding: 24px; }
+      .category-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============ Wizard Shell ============ -->
+  <header class="wizard-header">
+    <div class="brand">Amazon Business <span>| Configuration Wizard</span></div>
+  </header>
+
+  <nav class="progress-bar" id="progressBar"></nav>
+
+  <main class="wizard-content">
+    <div class="step-card" id="stepContent">
+      <!-- Current step renders here -->
+    </div>
+  </main>
+
+  <footer class="wizard-footer">
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-secondary" id="btnBack" onclick="StepManager.goBack()">← Back</button>
+      <button class="btn btn-sm btn-secondary" onclick="ProgressIO.exportProgress()" title="Export Progress" style="font-size:12px;">💾 Export</button>
+      <button class="btn btn-sm btn-secondary" onclick="ProgressIO.importProgress()" title="Import Progress" style="font-size:12px;">📂 Import</button>
+    </div>
+    <button class="btn btn-primary" id="btnNext" onclick="StepManager.goNext()">Next →</button>
+  </footer>
+
+  <!-- Resume Modal -->
+  <div class="modal-overlay hidden" id="resumeModal">
+    <div class="modal-box">
+      <h3>Resume Previous Session?</h3>
+      <p>We found a saved session. Would you like to pick up where you left off, or start fresh?</p>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="handleResumeChoice(false)">Start New</button>
+        <button class="btn btn-primary" onclick="handleResumeChoice(true)">Resume</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  /* ==========================================================
+     TASK 3.1 — V4 Template Constants
+     ========================================================== */
+
+  const CATEGORY_TAB_MAP = {
+    0: ["1a. Group Structure", "1b. Group and User Restructure",
+        "2.User Upload List (without AA)", "3. User Upload List (with AA)"],
+    1: ["5. Addresses"],
+    2: ["4a. BOI Root Level", "4b. BOI Group Level "],
+    3: ["6a. Approvals", "6a. Custom Approvals", "6b. Spending Limits Category",
+        "11. UNSPSC Restrict or Block GB", "15. Restrict products by keywor"],
+    4: ["7. Invoice Template US", "8. Invoice Template CA"],
+    5: ["9. BPO", "10. BPO Allocation"],
+    6: ["12. Highlight List", "13. Highlight Brands"],
+    7: ["16. Checkout Default"],
+    8: ["17. Business Giving", "17b. Business Giving Individual"],
+    9: ["14. Tax Exemption"],
+  };
+
+  const CONFIG_TAB_NAMES = [
+    "1a. Group Structure", "1b. Group and User Restructure",
+    "2.User Upload List (without AA)", "3. User Upload List (with AA)",
+    "4a. BOI Root Level", "4b. BOI Group Level ", "5. Addresses",
+    "6a. Approvals", "6a. Custom Approvals", "6b. Spending Limits Category",
+    "7. Invoice Template US", "8. Invoice Template CA",
+    "9. BPO", "10. BPO Allocation", "11. UNSPSC Restrict or Block GB",
+    "12. Highlight List", "13. Highlight Brands", "14. Tax Exemption",
+    "15. Restrict products by keywor", "16. Checkout Default",
+    "17. Business Giving", "17b. Business Giving Individual",
+  ];
+
+  const CAT_NAMES = {
+    0: "Users & Groups",
+    1: "Shipping Addresses",
+    2: "Order Checkout Fields",
+    3: "Spending Approvals & Controls",
+    4: "Invoicing",
+    5: "Blanket Purchase Orders",
+    6: "Preferred Products & Brands",
+    7: "Checkout Defaults",
+    8: "Business Giving",
+    9: "Tax Exemption",
+  };
+
+  const QUICK_REF = {
+    0: "Set up your org structure and invite employees to your Amazon Business account",
+    1: "Add delivery locations so buyers can ship to approved offices, warehouses, or sites",
+    2: "Add custom fields (PO numbers, cost centers, GL codes) that buyers fill in at checkout",
+    3: "Require manager approval for orders above a dollar threshold, or restrict product categories",
+    4: "Configure how and when you receive invoices — format, frequency, and delivery preferences",
+    5: "Pre-approve spending budgets for groups or projects with defined amounts and date ranges",
+    6: "Highlight specific products (ASINs) or brands so buyers see them first when shopping",
+    7: "Set a default shipping address and payment method so buyers don't have to choose every time",
+    8: "Set up gift campaigns to distribute Amazon credit to employees or recipients",
+    9: "Link your tax exemption certificates so qualifying purchases are tax-free",
+  };
+
+  const CAT_ICONS = {
+    0: "👥", 1: "📦", 2: "📋", 3: "💰", 4: "🧾",
+    5: "📄", 6: "⭐", 7: "🛒", 8: "🎁", 9: "📜",
+  };
+
+  const TAB_COLORS = {
+    "1a. Group Structure": "E47911",
+    "1b. Group and User Restructure": "E47911",
+    "2.User Upload List (without AA)": "E47911",
+    "3. User Upload List (with AA)": "E47911",
+    "4a. BOI Root Level": "4472C4",
+    "4b. BOI Group Level ": "4472C4",
+    "5. Addresses": "70AD47",
+    "6a. Approvals": "FFC000",
+    "6a. Custom Approvals": "FFC000",
+    "6b. Spending Limits Category": "FFC000",
+    "7. Invoice Template US": "ED7D31",
+    "8. Invoice Template CA": "ED7D31",
+    "9. BPO": "5B9BD5",
+    "10. BPO Allocation": "5B9BD5",
+    "11. UNSPSC Restrict or Block GB": "FFC000",
+    "12. Highlight List": "A9D18E",
+    "13. Highlight Brands": "A9D18E",
+    "14. Tax Exemption": "BF8F00",
+    "15. Restrict products by keywor": "FFC000",
+    "16. Checkout Default": "9DC3E6",
+    "17. Business Giving": "F4B183",
+    "17b. Business Giving Individual": "F4B183",
+  };
+
+  const DROPDOWN_RULES = {
+    "2.User Upload List (without AA)": { 3: ["Administrator", "Requisitioner"] },
+    "3. User Upload List (with AA)":   { 3: ["Administrator", "Requisitioner"] },
+    "6a. Approvals":        { 3: ["Spending Limit"], 4: ["GROUP_ONLY", "GROUP_AND_SUBGROUPS"] },
+    "6a. Custom Approvals": { 3: ["Spending Limit"], 4: ["GROUP_ONLY", "GROUP_AND_SUBGROUPS"] },
+    "4a. BOI Root Level":   { 4: ["Y", "N"], 5: ["Y", "N"], 6: ["Free Form", "Preset list"] },
+    "9. BPO": { 6: ["Yes","No"], 7: ["Yes","No"], 8: ["Yes","No"],
+                9: ["Monthly","Weekly","Quarterly","Annually"], 10: ["Yes","No"] },
+    "7. Invoice Template US": { 3: ["US", "CA"] },
+    "8. Invoice Template CA": { 3: ["US", "CA"] },
+    "5. Addresses": { 8: ["US", "CA"] },
+  };
+
+  const VALIDATION_RULES = {
+    required: (value) => value !== null && value !== undefined && String(value).trim() !== "",
+    email: (value) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(value).trim()),
+    dropdown: (value, options) => options.includes(String(value).trim()),
+  };
+
+
+  /* ==========================================================
+     TASK 2.1 — State Store
+     ========================================================== */
+
+  const StateStore = {
+    state: null,
+
+    createFreshState() {
+      return {
+        version: 1,
+        lastStep: "",
+        masterData: {},
+        selectedCategories: [],
+        stepData: {},
+      };
+    },
+
+    init() {
+      this.state = this.createFreshState();
+    },
+
+    saveState() {
+      try {
+        localStorage.setItem("configWizardState", JSON.stringify(this.state));
+      } catch (e) {
+        if (e.name === "QuotaExceededError" || e.code === 22) {
+          console.warn("StateStore: localStorage quota exceeded. Use Export Progress to save your work.");
+        } else {
+          console.warn("StateStore: Unable to save to localStorage.", e);
+        }
+      }
+    },
+
+    loadState() {
+      try {
+        const raw = localStorage.getItem("configWizardState");
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch (e) {
+        console.warn("StateStore: Unable to read from localStorage.", e);
+        return null;
+      }
+    },
+
+    clearState() {
+      try {
+        localStorage.removeItem("configWizardState");
+      } catch (e) {
+        console.warn("StateStore: Unable to clear localStorage.", e);
+      }
+      this.state = this.createFreshState();
+    },
+
+    isLocalStorageAvailable() {
+      try {
+        const key = "__cw_test__";
+        localStorage.setItem(key, "1");
+        localStorage.removeItem(key);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    },
+  };
+
+
+  /* ==========================================================
+     TASK 2.2 — Step Manager
+     ========================================================== */
+
+  const StepManager = {
+    steps: [],
+    currentIndex: 0,
+
+    /** Build the step sequence: Welcome + selected category steps (sorted by ID) + Review */
+    buildSteps(selectedCategories) {
+      const sorted = [...selectedCategories].sort((a, b) => a - b);
+      this.steps = [WelcomeStep];
+      sorted.forEach(catId => {
+        const step = categoryStepRegistry[catId];
+        if (step) this.steps.push(step);
+      });
+      this.steps.push(ReviewStep);
+      this.currentIndex = 0;
+    },
+
+    getCurrentStep() {
+      return this.steps[this.currentIndex] || null;
+    },
+
+    goNext() {
+      const current = this.getCurrentStep();
+      if (!current) return;
+
+      // Validate current step
+      const result = current.validate();
+      if (!result.valid) return;
+
+      // Save step data to state
+      if (current.getData) {
+        StateStore.state.stepData[current.id] = current.getData();
+      }
+
+      // Special: if on Welcome, rebuild steps from selected categories
+      if (current.id === "welcome") {
+        const data = current.getData();
+        StateStore.state.masterData = {
+          companyName: data.companyName,
+          marketplace: data.marketplace,
+          rootGroupPath: data.rootGroupPath,
+          groups: data.groups || [],
+        };
+        StateStore.state.selectedCategories = data.selectedCategories;
+        this.buildSteps(data.selectedCategories);
+        this.currentIndex = 1; // move past Welcome
+      } else if (this.currentIndex < this.steps.length - 1) {
+        this.currentIndex++;
+      }
+
+      StateStore.state.lastStep = this.getCurrentStep().id;
+      StateStore.saveState();
+      this.renderCurrentStep();
+      this.updateProgressBar();
+      this.updateButtons();
+    },
+
+    goBack() {
+      if (this.currentIndex <= 0) return;
+
+      // Save current step data before going back
+      const current = this.getCurrentStep();
+      if (current && current.getData) {
+        StateStore.state.stepData[current.id] = current.getData();
+      }
+
+      this.currentIndex--;
+      StateStore.state.lastStep = this.getCurrentStep().id;
+      StateStore.saveState();
+      this.renderCurrentStep();
+      this.updateProgressBar();
+      this.updateButtons();
+    },
+
+    goToStep(index) {
+      if (index < 0 || index >= this.steps.length) return;
+      // Only allow navigation to completed or current steps
+      if (index > this.currentIndex) return;
+
+      // Save current step data
+      const current = this.getCurrentStep();
+      if (current && current.getData) {
+        StateStore.state.stepData[current.id] = current.getData();
+      }
+
+      this.currentIndex = index;
+      StateStore.state.lastStep = this.getCurrentStep().id;
+      StateStore.saveState();
+      this.renderCurrentStep();
+      this.updateProgressBar();
+      this.updateButtons();
+    },
+
+    renderCurrentStep() {
+      const container = document.getElementById("stepContent");
+      container.innerHTML = "";
+      const step = this.getCurrentStep();
+      if (step) {
+        step.render(container);
+        // Restore data if available
+        if (step.setData && StateStore.state.stepData[step.id]) {
+          step.setData(StateStore.state.stepData[step.id]);
+        }
+      }
+    },
+
+    updateProgressBar() {
+      const bar = document.getElementById("progressBar");
+      bar.innerHTML = "";
+      this.steps.forEach((step, i) => {
+        if (i > 0) {
+          const conn = document.createElement("div");
+          conn.className = "progress-connector" + (i <= this.currentIndex ? " completed-line" : "");
+          bar.appendChild(conn);
+        }
+        const el = document.createElement("div");
+        el.className = "progress-step";
+        let icon = "○";
+        if (i < this.currentIndex) {
+          el.classList.add("completed");
+          icon = "✓";
+        } else if (i === this.currentIndex) {
+          el.classList.add("current");
+          icon = "●";
+        } else {
+          el.classList.add("future");
+        }
+        el.textContent = icon + " " + step.label;
+        if (i <= this.currentIndex) {
+          el.addEventListener("click", () => this.goToStep(i));
+        }
+        bar.appendChild(el);
+      });
+    },
+
+    updateButtons() {
+      const btnBack = document.getElementById("btnBack");
+      const btnNext = document.getElementById("btnNext");
+      btnBack.disabled = this.currentIndex === 0;
+      // On last step, change label
+      if (this.currentIndex === this.steps.length - 1) {
+        btnNext.textContent = "Generate →";
+      } else {
+        btnNext.textContent = "Next →";
+      }
+    },
+  };
+
+
+  /* ==========================================================
+     TASK 4.1 — Welcome Step
+     ========================================================== */
+
+  const WelcomeStep = {
+    id: "welcome",
+    label: "Welcome",
+    categoryId: -1,
+
+    render(container) {
+      container.innerHTML = `
+        <h2>Welcome to the Configuration Wizard</h2>
+        <p class="step-description">Let's set up your Amazon Business account. Start by entering your company details, defining your group structure, and selecting the features you'd like to configure.</p>
+
+        <div class="form-group" id="fg-companyName">
+          <label>Company Name <span class="required">*</span></label>
+          <input type="text" id="inp-companyName" placeholder="e.g. Acme Corp">
+          <div class="error-msg" id="err-companyName">Company Name is required</div>
+        </div>
+
+        <div class="form-group" id="fg-marketplace">
+          <label>Marketplace <span class="required">*</span></label>
+          <select id="inp-marketplace">
+            <option value="">— Select —</option>
+            <option value="US">US</option>
+            <option value="CA">CA</option>
+          </select>
+          <div class="error-msg" id="err-marketplace">Please select a marketplace</div>
+        </div>
+
+        <div class="form-group" id="fg-rootGroupPath">
+          <label>Root Group Path <span class="required">*</span></label>
+          <input type="text" id="inp-rootGroupPath" placeholder="e.g. Acme Corp">
+          <div class="error-msg" id="err-rootGroupPath">Root Group Path is required</div>
+        </div>
+
+        <hr style="margin: 24px 0; border: none; border-top: 1px solid #EEE;">
+
+        <h3 style="margin-bottom: 8px;">Group Structure</h3>
+        <p style="color: #666; font-size: 13px; margin-bottom: 12px;">Define sub-groups under your root group. Full paths are computed automatically.</p>
+        <div id="groupRows" class="group-rows"></div>
+        <button class="btn btn-sm btn-secondary" onclick="WelcomeStep.addGroupRow()" style="margin-top: 4px;">+ Add Group</button>
+
+        <hr style="margin: 24px 0; border: none; border-top: 1px solid #EEE;">
+
+        <div class="form-group" id="fg-categories">
+          <h3 style="margin-bottom: 4px;">Feature Categories <span class="required">*</span></h3>
+          <p style="color: #666; font-size: 13px; margin-bottom: 12px;">Select at least one feature to configure.</p>
+          <div class="category-grid" id="categoryGrid"></div>
+          <div class="error-msg" id="err-categories" style="margin-top: 8px;">Please select at least one feature category</div>
+        </div>
+      `;
+
+      // Render category checkboxes
+      const grid = document.getElementById("categoryGrid");
+      for (let i = 0; i < 10; i++) {
+        const card = document.createElement("div");
+        card.className = "category-card";
+        card.dataset.catId = i;
+        card.innerHTML = `
+          <input type="checkbox" id="cat-${i}" value="${i}">
+          <div class="cat-icon">${CAT_ICONS[i]}</div>
+          <div class="cat-info">
+            <div class="cat-name">${CAT_NAMES[i]}</div>
+            <div class="cat-desc">${QUICK_REF[i]}</div>
+          </div>
+        `;
+        card.addEventListener("click", (e) => {
+          if (e.target.tagName !== "INPUT") {
+            const cb = card.querySelector("input[type=checkbox]");
+            cb.checked = !cb.checked;
+          }
+          card.classList.toggle("selected", card.querySelector("input").checked);
+          this._clearError("categories");
+        });
+        grid.appendChild(card);
+      }
+
+      // Wire up live error clearing
+      ["companyName", "rootGroupPath"].forEach(field => {
+        document.getElementById("inp-" + field).addEventListener("input", () => this._clearError(field));
+      });
+      document.getElementById("inp-marketplace").addEventListener("change", () => this._clearError("marketplace"));
+    },
+
+    addGroupRow(name) {
+      const container = document.getElementById("groupRows");
+      const row = document.createElement("div");
+      row.className = "group-row";
+      row.innerHTML = `
+        <input type="text" placeholder="Group Name" class="group-name-input" value="${name || ""}">
+        <div class="full-path"></div>
+        <button class="btn-remove" title="Remove group" onclick="this.parentElement.remove(); WelcomeStep._updateAllPaths();">✕</button>
+      `;
+      container.appendChild(row);
+      const inp = row.querySelector(".group-name-input");
+      inp.addEventListener("input", () => this._updateAllPaths());
+      this._updateAllPaths();
+    },
+
+    _updateAllPaths() {
+      const root = (document.getElementById("inp-rootGroupPath") || {}).value || "";
+      document.querySelectorAll(".group-row").forEach(row => {
+        const name = row.querySelector(".group-name-input").value;
+        const pathEl = row.querySelector(".full-path");
+        pathEl.textContent = name ? (root ? root + "/" + name : name) : (root || "—");
+      });
+    },
+
+    _clearError(field) {
+      const fg = document.getElementById("fg-" + field);
+      if (fg) fg.classList.remove("has-error");
+    },
+
+    validate() {
+      const errors = [];
+      const companyName = document.getElementById("inp-companyName").value.trim();
+      const marketplace = document.getElementById("inp-marketplace").value;
+      const rootGroupPath = document.getElementById("inp-rootGroupPath").value.trim();
+
+      // Clear all errors first
+      ["companyName", "marketplace", "rootGroupPath", "categories"].forEach(f => this._clearError(f));
+
+      if (!VALIDATION_RULES.required(companyName)) {
+        document.getElementById("fg-companyName").classList.add("has-error");
+        errors.push("Company Name is required");
+      }
+      if (!VALIDATION_RULES.required(marketplace)) {
+        document.getElementById("fg-marketplace").classList.add("has-error");
+        errors.push("Please select a marketplace");
+      }
+      if (!VALIDATION_RULES.required(rootGroupPath)) {
+        document.getElementById("fg-rootGroupPath").classList.add("has-error");
+        errors.push("Root Group Path is required");
+      }
+
+      const selected = this._getSelectedCategories();
+      if (selected.length === 0) {
+        document.getElementById("fg-categories").classList.add("has-error");
+        errors.push("Please select at least one feature category");
+      }
+
+      if (errors.length > 0) {
+        // Scroll to first error
+        const firstErr = document.querySelector(".has-error");
+        if (firstErr) firstErr.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+
+      return { valid: errors.length === 0, errors };
+    },
+
+    _getSelectedCategories() {
+      const cats = [];
+      document.querySelectorAll("#categoryGrid input[type=checkbox]:checked").forEach(cb => {
+        cats.push(parseInt(cb.value, 10));
+      });
+      return cats;
+    },
+
+    getData() {
+      const groups = [];
+      const root = (document.getElementById("inp-rootGroupPath") || {}).value || "";
+      document.querySelectorAll(".group-row").forEach(row => {
+        const name = row.querySelector(".group-name-input").value.trim();
+        if (name) {
+          groups.push({ name, fullPath: root ? root + "/" + name : name });
+        }
+      });
+      return {
+        companyName: (document.getElementById("inp-companyName") || {}).value || "",
+        marketplace: (document.getElementById("inp-marketplace") || {}).value || "",
+        rootGroupPath: (document.getElementById("inp-rootGroupPath") || {}).value || "",
+        groups,
+        selectedCategories: this._getSelectedCategories(),
+      };
+    },
+
+    setData(data) {
+      if (!data) return;
+      if (data.companyName) document.getElementById("inp-companyName").value = data.companyName;
+      if (data.marketplace) document.getElementById("inp-marketplace").value = data.marketplace;
+      if (data.rootGroupPath) {
+        document.getElementById("inp-rootGroupPath").value = data.rootGroupPath;
+      }
+      // Restore groups
+      if (data.groups && data.groups.length) {
+        data.groups.forEach(g => this.addGroupRow(g.name));
+      }
+      // Restore selected categories
+      if (data.selectedCategories) {
+        data.selectedCategories.forEach(id => {
+          const cb = document.getElementById("cat-" + id);
+          if (cb) {
+            cb.checked = true;
+            cb.closest(".category-card").classList.add("selected");
+          }
+        });
+      }
+      // Wire root path changes to update group paths
+      document.getElementById("inp-rootGroupPath").addEventListener("input", () => this._updateAllPaths());
+    },
+  };
+
+
+  /* Old placeholder sections removed — real implementations below */
+
+
+  /* ==========================================================
+     TASK 6.1 — File Upload + Column Mapper (Reusable Component)
+     ========================================================== */
+
+  const FileUploadMapper = {
+    create(containerId, expectedFields, onConfirm) {
+      return {
+        containerId,
+        expectedFields, // [{key, label}]
+        onConfirm,
+        parsedHeaders: [],
+        parsedRows: [],
+        mappings: {},
+        confirmed: false,
+        mappedData: [],
+
+        render(parentEl) {
+          const div = document.createElement("div");
+          div.id = this.containerId;
+          div.innerHTML = `
+            <div class="upload-zone" id="${this.containerId}-dropzone" style="border:2px dashed #CCC;border-radius:8px;padding:40px;text-align:center;cursor:pointer;transition:border-color 0.2s;background:#FAFAFA;">
+              <p style="font-size:16px;color:#555;">📁 Drag & drop a file here, or click to browse</p>
+              <p style="font-size:12px;color:#999;margin-top:4px;">Accepts .csv, .xlsx, .xls</p>
+              <input type="file" accept=".csv,.xlsx,.xls" style="display:none;" id="${this.containerId}-fileInput">
+            </div>
+            <div id="${this.containerId}-error" style="color:#D13212;margin-top:8px;display:none;"></div>
+            <div id="${this.containerId}-preview" style="display:none;margin-top:16px;"></div>
+            <div id="${this.containerId}-mapping" style="display:none;margin-top:16px;"></div>
+            <div id="${this.containerId}-datatable" style="display:none;margin-top:16px;"></div>
+          `;
+          parentEl.appendChild(div);
+          this._wireEvents();
+        },
+
+        _wireEvents() {
+          const dz = document.getElementById(this.containerId + "-dropzone");
+          const fi = document.getElementById(this.containerId + "-fileInput");
+          dz.addEventListener("click", () => fi.click());
+          dz.addEventListener("dragover", (e) => { e.preventDefault(); dz.style.borderColor = "#E47911"; });
+          dz.addEventListener("dragleave", () => { dz.style.borderColor = "#CCC"; });
+          dz.addEventListener("drop", (e) => { e.preventDefault(); dz.style.borderColor = "#CCC"; if (e.dataTransfer.files.length) this._handleFile(e.dataTransfer.files[0]); });
+          fi.addEventListener("change", (e) => { if (e.target.files.length) this._handleFile(e.target.files[0]); });
+        },
+
+        _handleFile(file) {
+          const errEl = document.getElementById(this.containerId + "-error");
+          errEl.style.display = "none";
+          const ext = file.name.split(".").pop().toLowerCase();
+          if (!["csv","xlsx","xls"].includes(ext)) {
+            errEl.textContent = "Unrecognized file format. Please upload a .csv, .xlsx, or .xls file.";
+            errEl.style.display = "block";
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const data = new Uint8Array(e.target.result);
+              const wb = XLSX.read(data, { type: "array" });
+              const ws = wb.Sheets[wb.SheetNames[0]];
+              const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+              if (!json.length || json.length < 2) {
+                errEl.textContent = "No data rows found in the uploaded file.";
+                errEl.style.display = "block";
+                return;
+              }
+              this.parsedHeaders = json[0].map(h => String(h).trim());
+              this.parsedRows = json.slice(1).map(row => row.map(c => String(c).trim()));
+              // Update dropzone to show filename
+              const dz = document.getElementById(this.containerId + "-dropzone");
+              dz.innerHTML = `<p style="color:#067D62;">✓ <strong>${file.name}</strong> — ${this.parsedRows.length} rows, ${this.parsedHeaders.length} columns</p><p style="font-size:12px;color:#999;margin-top:4px;">Drop another file to replace</p><input type="file" accept=".csv,.xlsx,.xls" style="display:none;" id="${this.containerId}-fileInput">`;
+              this._wireEvents();
+              this._showPreview();
+              this._showMapping();
+            } catch (ex) {
+              errEl.textContent = "Unable to read this file. Please check the file format and try again.";
+              errEl.style.display = "block";
+            }
+          };
+          reader.readAsArrayBuffer(file);
+        },
+
+        _showPreview() {
+          const el = document.getElementById(this.containerId + "-preview");
+          const previewRows = this.parsedRows.slice(0, 5);
+          let html = `<h4 style="margin-bottom:8px;">Preview (first ${previewRows.length} rows)</h4><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr>`;
+          this.parsedHeaders.forEach(h => { html += `<th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;white-space:nowrap;">${h}</th>`; });
+          html += `</tr></thead><tbody>`;
+          previewRows.forEach(row => {
+            html += "<tr>";
+            this.parsedHeaders.forEach((_, ci) => { html += `<td style="border:1px solid #EEE;padding:6px 8px;">${row[ci] || ""}</td>`; });
+            html += "</tr>";
+          });
+          html += "</tbody></table></div>";
+          el.innerHTML = html;
+          el.style.display = "block";
+        },
+
+        _showMapping() {
+          const el = document.getElementById(this.containerId + "-mapping");
+          this._autoDetect();
+          let html = `<h4 style="margin-bottom:8px;">Column Mapping</h4><p style="font-size:13px;color:#666;margin-bottom:12px;">Map each expected field to a column from your file.</p>`;
+          this.expectedFields.forEach(f => {
+            const selVal = this.mappings[f.key] !== undefined ? this.mappings[f.key] : "";
+            html += `<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+              <label style="min-width:140px;font-weight:600;font-size:13px;">${f.label}</label>
+              <select id="${this.containerId}-map-${f.key}" style="flex:1;padding:8px;border:1px solid #CCC;border-radius:4px;min-height:36px;" data-field="${f.key}">
+                <option value="">— Select column —</option>
+                ${this.parsedHeaders.map((h, i) => `<option value="${i}" ${selVal === i ? "selected" : ""}>${h}</option>`).join("")}
+              </select>
+            </div>`;
+          });
+          html += `<button class="btn btn-sm btn-primary" id="${this.containerId}-confirmBtn" style="margin-top:8px;">Confirm Mapping</button>`;
+          el.innerHTML = html;
+          el.style.display = "block";
+          document.getElementById(this.containerId + "-confirmBtn").addEventListener("click", () => this._confirmMapping());
+        },
+
+        _autoDetect() {
+          this.mappings = {};
+          this.expectedFields.forEach(f => {
+            const needle = f.label.toLowerCase();
+            const matches = [];
+            this.parsedHeaders.forEach((h, i) => {
+              if (h.toLowerCase().includes(needle) || needle.includes(h.toLowerCase())) matches.push(i);
+            });
+            if (matches.length === 1) this.mappings[f.key] = matches[0];
+          });
+        },
+
+        _confirmMapping() {
+          // Read current selections
+          this.expectedFields.forEach(f => {
+            const sel = document.getElementById(this.containerId + "-map-" + f.key);
+            if (sel && sel.value !== "") this.mappings[f.key] = parseInt(sel.value, 10);
+            else delete this.mappings[f.key];
+          });
+          // Transform data
+          this.mappedData = this.parsedRows.map(row => {
+            const obj = {};
+            this.expectedFields.forEach(f => {
+              obj[f.key] = this.mappings[f.key] !== undefined ? (row[this.mappings[f.key]] || "") : "";
+            });
+            return obj;
+          });
+          this.confirmed = true;
+          this._showDataTable();
+          if (this.onConfirm) this.onConfirm(this.mappedData);
+        },
+
+        _showDataTable() {
+          const el = document.getElementById(this.containerId + "-datatable");
+          let html = `<h4 style="margin-bottom:8px;">Mapped Data (${this.mappedData.length} rows)</h4><div style="overflow-x:auto;max-height:400px;overflow-y:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;" id="${this.containerId}-table"><thead><tr>`;
+          html += `<th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;">#</th>`;
+          this.expectedFields.forEach(f => { html += `<th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;white-space:nowrap;">${f.label}</th>`; });
+          html += `</tr></thead><tbody>`;
+          this.mappedData.forEach((row, ri) => {
+            html += `<tr>`;
+            html += `<td style="border:1px solid #EEE;padding:4px 8px;color:#999;">${ri + 1}</td>`;
+            this.expectedFields.forEach(f => {
+              html += `<td style="border:1px solid #EEE;padding:2px 4px;"><input type="text" value="${(row[f.key] || "").replace(/"/g, "&quot;")}" data-row="${ri}" data-field="${f.key}" style="width:100%;border:1px solid transparent;padding:4px;font-size:13px;border-radius:2px;" onfocus="this.style.borderColor='#E47911'" onblur="this.style.borderColor='transparent'"></td>`;
+            });
+            html += `</tr>`;
+          });
+          html += `</tbody></table></div>`;
+          el.innerHTML = html;
+          el.style.display = "block";
+          // Hide mapping section
+          document.getElementById(this.containerId + "-mapping").style.display = "none";
+          // Wire edits
+          el.querySelectorAll("input[data-row]").forEach(inp => {
+            inp.addEventListener("change", (e) => {
+              const ri = parseInt(e.target.dataset.row, 10);
+              const fk = e.target.dataset.field;
+              this.mappedData[ri][fk] = e.target.value;
+            });
+          });
+        },
+
+        getState() {
+          return { parsedHeaders: this.parsedHeaders, parsedRows: this.parsedRows, mappings: this.mappings, confirmed: this.confirmed, mappedData: this.mappedData };
+        },
+
+        setState(s) {
+          if (!s) return;
+          this.parsedHeaders = s.parsedHeaders || [];
+          this.parsedRows = s.parsedRows || [];
+          this.mappings = s.mappings || {};
+          this.confirmed = s.confirmed || false;
+          this.mappedData = s.mappedData || [];
+          if (this.confirmed && this.mappedData.length) {
+            const dz = document.getElementById(this.containerId + "-dropzone");
+            if (dz) dz.innerHTML = `<p style="color:#067D62;">✓ File loaded — ${this.parsedRows.length} rows</p><input type="file" accept=".csv,.xlsx,.xls" style="display:none;" id="${this.containerId}-fileInput">`;
+            this._wireEvents();
+            this._showDataTable();
+          } else if (this.parsedHeaders.length) {
+            this._showPreview();
+            this._showMapping();
+          }
+        }
+      };
+    }
+  };
+
+
+  /* ==========================================================
+     TASK 7.1 — Group Assigner (Reusable Component)
+     ========================================================== */
+
+  const GroupAssigner = {
+    create(containerId, options) {
+      const opts = options || {};
+      const multiGroupRole = opts.multiGroupRole || false; // Edit 1: multi-group+role mode
+      return {
+        containerId,
+        assignments: {}, // legacy single-group: { rowIdx: "path" }, multi: { rowIdx: [{group,role},...] }
+        multiGroupRole,
+
+        getGroupPaths() {
+          const md = StateStore.state.masterData || {};
+          const root = md.rootGroupPath || "Root";
+          const paths = [root];
+          (md.groups || []).forEach(g => { if (g.fullPath) paths.push(g.fullPath); });
+          return paths;
+        },
+
+        render(parentEl, mappedData, expectedFields, extraColumns) {
+          this._mappedData = mappedData;
+          this._expectedFields = expectedFields;
+          this._extraColumns = extraColumns || [];
+          const paths = this.getGroupPaths();
+          const div = document.createElement("div");
+          div.id = this.containerId;
+
+          let bulkHtml;
+          if (this.multiGroupRole) {
+            bulkHtml = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:12px;background:#F9F9F9;border-radius:6px;flex-wrap:wrap;">
+              <label style="font-weight:600;font-size:13px;">Bulk Assign:</label>
+              <select id="${this.containerId}-bulkGroup" style="padding:6px 10px;border:1px solid #CCC;border-radius:4px;min-height:36px;">
+                ${paths.map(p => `<option value="${p}">${p}</option>`).join("")}
+              </select>
+              <select id="${this.containerId}-bulkRole" style="padding:6px 10px;border:1px solid #CCC;border-radius:4px;min-height:36px;">
+                <option value="Requisitioner">Requisitioner</option>
+                <option value="Administrator">Administrator</option>
+                <option value="Technical">Technical</option>
+                <option value="Finance">Finance</option>
+              </select>
+              <button class="btn btn-sm btn-secondary" id="${this.containerId}-bulkBtn">Apply to users with no groups</button>
+            </div>`;
+          } else {
+            bulkHtml = `<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:12px;background:#F9F9F9;border-radius:6px;">
+              <label style="font-weight:600;font-size:13px;">Bulk Assign Group:</label>
+              <select id="${this.containerId}-bulkGroup" style="padding:6px 10px;border:1px solid #CCC;border-radius:4px;min-height:36px;">
+                ${paths.map(p => `<option value="${p}">${p}</option>`).join("")}
+              </select>
+              <button class="btn btn-sm btn-secondary" id="${this.containerId}-bulkBtn">Apply to unassigned</button>
+            </div>`;
+          }
+
+          let html = bulkHtml;
+          html += `<div style="overflow-x:auto;max-height:500px;overflow-y:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;" id="${this.containerId}-table"><thead><tr>`;
+          html += `<th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;">#</th>`;
+          expectedFields.forEach(f => { html += `<th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;">${f.label}</th>`; });
+
+          if (this.multiGroupRole) {
+            html += `<th style="border:1px solid #DDD;padding:6px 8px;background:#E8F5E9;">Groups & Roles</th>`;
+          } else {
+            html += `<th style="border:1px solid #DDD;padding:6px 8px;background:#E8F5E9;">Group</th>`;
+          }
+          this._extraColumns.forEach(ec => { html += `<th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;">${ec.label}</th>`; });
+          html += `</tr></thead><tbody>`;
+
+          mappedData.forEach((row, ri) => {
+            html += `<tr><td style="border:1px solid #EEE;padding:4px 8px;color:#999;">${ri + 1}</td>`;
+            expectedFields.forEach(f => { html += `<td style="border:1px solid #EEE;padding:4px 8px;font-size:13px;">${row[f.key] || ""}</td>`; });
+
+            if (this.multiGroupRole) {
+              html += `<td style="border:1px solid #EEE;padding:6px 8px;min-width:260px;" id="${this.containerId}-mgr-cell-${ri}">`;
+              html += this._renderMultiGroupCell(ri, paths);
+              html += `</td>`;
+            } else {
+              const curGroup = this.assignments[ri] || "";
+              html += `<td style="border:1px solid #EEE;padding:2px 4px;"><select data-row="${ri}" class="ga-group-sel" style="width:100%;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;">
+                <option value="">— Select —</option>
+                ${paths.map(p => `<option value="${p}" ${curGroup === p ? "selected" : ""}>${p}</option>`).join("")}
+              </select></td>`;
+            }
+
+            this._extraColumns.forEach(ec => { html += `<td style="border:1px solid #EEE;padding:2px 4px;">${ec.renderCell(ri)}</td>`; });
+            html += `</tr>`;
+          });
+          html += `</tbody></table></div>`;
+          div.innerHTML = html;
+          parentEl.appendChild(div);
+
+          // Wire events
+          if (this.multiGroupRole) {
+            this._wireMultiGroupEvents(div, paths);
+            document.getElementById(this.containerId + "-bulkBtn").addEventListener("click", () => {
+              const group = document.getElementById(this.containerId + "-bulkGroup").value;
+              const role = document.getElementById(this.containerId + "-bulkRole").value;
+              mappedData.forEach((_, ri) => {
+                const arr = this.assignments[ri] || [];
+                if (arr.length === 0) {
+                  if (!this.assignments[ri]) this.assignments[ri] = [];
+                  this.assignments[ri].push({ group, role });
+                  this._refreshMultiGroupCell(ri, paths);
+                }
+              });
+            });
+          } else {
+            div.querySelectorAll(".ga-group-sel").forEach(sel => {
+              sel.addEventListener("change", (e) => { this.assignments[parseInt(e.target.dataset.row, 10)] = e.target.value; });
+            });
+            document.getElementById(this.containerId + "-bulkBtn").addEventListener("click", () => {
+              const group = document.getElementById(this.containerId + "-bulkGroup").value;
+              div.querySelectorAll(".ga-group-sel").forEach(sel => {
+                const ri = parseInt(sel.dataset.row, 10);
+                if (!this.assignments[ri]) { this.assignments[ri] = group; sel.value = group; }
+              });
+            });
+          }
+        },
+
+        // --- Multi-group+role helpers ---
+        _renderMultiGroupCell(ri, paths) {
+          const pairs = this.assignments[ri] || [];
+          let html = '<div class="mga-tags" id="' + this.containerId + '-tags-' + ri + '">';
+          pairs.forEach((p, pi) => {
+            html += `<span class="mga-tag">${p.group} <em style="color:#666;">(${p.role})</em> <button class="mga-remove" data-row="${ri}" data-pair="${pi}" title="Remove">✕</button></span>`;
+          });
+          html += '</div>';
+          html += `<button class="btn btn-sm btn-secondary" style="margin-top:4px;font-size:12px;padding:4px 10px;min-height:28px;" data-row="${ri}" data-action="mga-add">➕ Add Group</button>`;
+          html += `<div class="mga-panel" id="${this.containerId}-addpanel-${ri}" style="display:none;margin-top:6px;">
+            <div class="mga-add-row">
+              <select id="${this.containerId}-newgrp-${ri}">
+                ${paths.map(p => `<option value="${p}">${p}</option>`).join("")}
+              </select>
+              <select id="${this.containerId}-newrole-${ri}">
+                <option value="Requisitioner">Requisitioner</option>
+                <option value="Administrator">Administrator</option>
+                <option value="Technical">Technical</option>
+                <option value="Finance">Finance</option>
+              </select>
+              <button class="btn btn-sm btn-primary" style="padding:4px 12px;min-height:28px;font-size:12px;" data-row="${ri}" data-action="mga-confirm">Add</button>
+            </div>
+          </div>`;
+          return html;
+        },
+
+        _refreshMultiGroupCell(ri, paths) {
+          const cell = document.getElementById(this.containerId + "-mgr-cell-" + ri);
+          if (!cell) return;
+          cell.innerHTML = this._renderMultiGroupCell(ri, paths);
+          this._wireMultiGroupCellEvents(cell, paths);
+        },
+
+        _wireMultiGroupEvents(container, paths) {
+          container.querySelectorAll('[data-action="mga-add"]').forEach(btn => {
+            btn.addEventListener("click", (e) => {
+              const ri = parseInt(e.target.dataset.row, 10);
+              const panel = document.getElementById(this.containerId + "-addpanel-" + ri);
+              if (panel) panel.style.display = panel.style.display === "none" ? "block" : "none";
+            });
+          });
+          container.querySelectorAll('[data-action="mga-confirm"]').forEach(btn => {
+            btn.addEventListener("click", (e) => {
+              const ri = parseInt(e.target.dataset.row, 10);
+              const grpSel = document.getElementById(this.containerId + "-newgrp-" + ri);
+              const roleSel = document.getElementById(this.containerId + "-newrole-" + ri);
+              if (!grpSel || !roleSel) return;
+              const group = grpSel.value;
+              const role = roleSel.value;
+              if (!this.assignments[ri]) this.assignments[ri] = [];
+              // Prevent duplicate group+role
+              const exists = this.assignments[ri].some(p => p.group === group && p.role === role);
+              if (!exists) {
+                this.assignments[ri].push({ group, role });
+                this._refreshMultiGroupCell(ri, paths);
+              }
+            });
+          });
+          container.querySelectorAll(".mga-remove").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+              const ri = parseInt(e.target.dataset.row, 10);
+              const pi = parseInt(e.target.dataset.pair, 10);
+              if (this.assignments[ri]) {
+                this.assignments[ri].splice(pi, 1);
+                this._refreshMultiGroupCell(ri, paths);
+              }
+            });
+          });
+        },
+
+        _wireMultiGroupCellEvents(cell, paths) {
+          cell.querySelectorAll('[data-action="mga-add"]').forEach(btn => {
+            btn.addEventListener("click", (e) => {
+              const ri = parseInt(e.target.dataset.row, 10);
+              const panel = document.getElementById(this.containerId + "-addpanel-" + ri);
+              if (panel) panel.style.display = panel.style.display === "none" ? "block" : "none";
+            });
+          });
+          cell.querySelectorAll('[data-action="mga-confirm"]').forEach(btn => {
+            btn.addEventListener("click", (e) => {
+              const ri = parseInt(e.target.dataset.row, 10);
+              const grpSel = document.getElementById(this.containerId + "-newgrp-" + ri);
+              const roleSel = document.getElementById(this.containerId + "-newrole-" + ri);
+              if (!grpSel || !roleSel) return;
+              const group = grpSel.value;
+              const role = roleSel.value;
+              if (!this.assignments[ri]) this.assignments[ri] = [];
+              const exists = this.assignments[ri].some(p => p.group === group && p.role === role);
+              if (!exists) {
+                this.assignments[ri].push({ group, role });
+                this._refreshMultiGroupCell(ri, paths);
+              }
+            });
+          });
+          cell.querySelectorAll(".mga-remove").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+              const ri = parseInt(e.target.dataset.row, 10);
+              const pi = parseInt(e.target.dataset.pair, 10);
+              if (this.assignments[ri]) {
+                this.assignments[ri].splice(pi, 1);
+                this._refreshMultiGroupCell(ri, paths);
+              }
+            });
+          });
+        },
+
+        getState() { return { assignments: JSON.parse(JSON.stringify(this.assignments)) }; },
+        setState(s) { if (s && s.assignments) this.assignments = JSON.parse(JSON.stringify(s.assignments)); }
+      };
+    }
+  };
+
+
+  /* ==========================================================
+     TASK 9.2 — Delivery Hours Editor (Modal)
+     ========================================================== */
+
+  const DeliveryHoursEditor = {
+    schedules: {},
+    show(rowIndex, onSave) {
+      const existing = this.schedules[rowIndex] || {};
+      const days = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
+      let html = `<div class="modal-overlay" id="dhModal"><div class="modal-box" style="max-width:520px;text-align:left;">
+        <h3 style="margin-bottom:16px;">Delivery Hours — Address Row ${rowIndex + 1}</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead><tr><th style="padding:6px;text-align:left;">Day</th><th style="padding:6px;">Start</th><th style="padding:6px;">End</th></tr></thead><tbody>`;
+      days.forEach(d => {
+        const dk = d.toLowerCase().substring(0, 3);
+        const s = existing[dk] || ["09:00","17:00"];
+        html += `<tr><td style="padding:6px;font-weight:600;">${d}</td>
+          <td style="padding:6px;"><input type="time" id="dh-${dk}-start" value="${s[0]}" style="padding:4px;border:1px solid #CCC;border-radius:3px;min-height:36px;"></td>
+          <td style="padding:6px;"><input type="time" id="dh-${dk}-end" value="${s[1]}" style="padding:4px;border:1px solid #CCC;border-radius:3px;min-height:36px;"></td></tr>`;
+      });
+      html += `</tbody></table>
+        <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
+          <button class="btn btn-sm btn-secondary" id="dhCancel">Cancel</button>
+          <button class="btn btn-sm btn-primary" id="dhSave">Save</button>
+        </div></div></div>`;
+      document.body.insertAdjacentHTML("beforeend", html);
+      document.getElementById("dhCancel").addEventListener("click", () => document.getElementById("dhModal").remove());
+      document.getElementById("dhSave").addEventListener("click", () => {
+        const schedule = {};
+        days.forEach(d => {
+          const dk = d.toLowerCase().substring(0, 3);
+          schedule[dk] = [document.getElementById("dh-" + dk + "-start").value, document.getElementById("dh-" + dk + "-end").value];
+        });
+        this.schedules[rowIndex] = schedule;
+        document.getElementById("dhModal").remove();
+        if (onSave) onSave(rowIndex, schedule);
+      });
+    }
+  };
+
+
+  /* ==========================================================
+     TASK 8.1 — Users & Groups Step (Category 0)
+     ========================================================== */
+
+  const UsersGroupsStep = {
+    id: "cat-0", label: CAT_NAMES[0], categoryId: 0,
+    _uploader: null, _groupAssigner: null,
+
+    render(container) {
+      const md = StateStore.state.masterData || {};
+      const groups = md.groups || [];
+      const root = md.rootGroupPath || "";
+      container.innerHTML = `
+        <h2>${CAT_ICONS[0]} ${CAT_NAMES[0]}</h2>
+        <p class="step-description">Upload your employee directory to bulk-import users into your Amazon Business account. Each user needs an email, name, and role. You can then assign users to groups.</p>
+        <div style="background:#F0F7FF;border:1px solid #D0E3F7;border-radius:6px;padding:14px;margin-bottom:20px;">
+          <strong>Group Structure (from Welcome step):</strong>
+          <ul style="margin:8px 0 0 20px;font-size:13px;color:#555;">
+            <li><strong>${root}</strong> (Root)</li>
+            ${groups.map(g => `<li>${g.fullPath}</li>`).join("")}
+          </ul>
+        </div>
+        <div id="usersUploadArea"></div>
+        <div id="usersGroupArea" style="margin-top:16px;"></div>
+      `;
+      const fields = [
+        {key:"email",label:"Email"},{key:"firstName",label:"First Name"},{key:"lastName",label:"Last Name"},
+        {key:"role",label:"Role"},{key:"department",label:"Department"}
+      ];
+      this._uploader = FileUploadMapper.create("usersUpload", fields, (data) => {
+        this._renderGroupAssigner(data, fields);
+      });
+      this._uploader.render(document.getElementById("usersUploadArea"));
+    },
+
+    _renderGroupAssigner(data, fields) {
+      const area = document.getElementById("usersGroupArea");
+      area.innerHTML = "";
+      this._groupAssigner = GroupAssigner.create("usersGroups", { multiGroupRole: true });
+      this._groupAssigner.render(area, data, fields, []);
+    },
+
+    validate() {
+      if (!this._uploader || !this._uploader.confirmed) {
+        return { valid: false, errors: ["Please upload a file and confirm column mappings."] };
+      }
+      return { valid: true, errors: [] };
+    },
+
+    getData() {
+      return {
+        uploader: this._uploader ? this._uploader.getState() : null,
+        groupAssigner: this._groupAssigner ? this._groupAssigner.getState() : null,
+      };
+    },
+
+    setData(data) {
+      if (!data) return;
+      if (data.uploader && this._uploader) {
+        this._uploader.setState(data.uploader);
+        if (data.uploader.confirmed && data.uploader.mappedData && data.uploader.mappedData.length) {
+          const fields = [{key:"email",label:"Email"},{key:"firstName",label:"First Name"},{key:"lastName",label:"Last Name"},{key:"role",label:"Role"},{key:"department",label:"Department"}];
+          this._renderGroupAssigner(data.uploader.mappedData, fields);
+          if (data.groupAssigner && this._groupAssigner) this._groupAssigner.setState(data.groupAssigner);
+        }
+      }
+    },
+  };
+
+
+  /* ==========================================================
+     TASK 9.1 — Shipping Addresses Step (Category 1)
+     ========================================================== */
+
+  const ShippingAddressesStep = {
+    id: "cat-1", label: CAT_NAMES[1], categoryId: 1,
+    _uploader: null, _groupAssigner: null,
+
+    render(container) {
+      container.innerHTML = `
+        <h2>${CAT_ICONS[1]} ${CAT_NAMES[1]}</h2>
+        <p class="step-description">Upload your address book to add delivery locations. Each address needs at least a street, city, state, and ZIP. You can assign addresses to groups and set delivery hours per location.</p>
+        <div id="addrUploadArea"></div>
+        <div id="addrGroupArea" style="margin-top:16px;"></div>
+      `;
+      const fields = [
+        {key:"addressLine1",label:"Address Line 1"},{key:"addressLine2",label:"Address Line 2"},
+        {key:"city",label:"City"},{key:"state",label:"State"},{key:"zip",label:"ZIP"},
+        {key:"country",label:"Country"},{key:"label",label:"Address Label"}
+      ];
+      this._uploader = FileUploadMapper.create("addrUpload", fields, (data) => {
+        this._renderGroupAssigner(data, fields);
+      });
+      this._uploader.render(document.getElementById("addrUploadArea"));
+    },
+
+    _renderGroupAssigner(data, fields) {
+      const area = document.getElementById("addrGroupArea");
+      area.innerHTML = "";
+      this._groupAssigner = GroupAssigner.create("addrGroups");
+      const extraCols = [{
+        label: "Delivery Hours",
+        renderCell: (ri) => `<button class="btn btn-sm btn-secondary" onclick="DeliveryHoursEditor.show(${ri}, function(i,s){ var b=document.getElementById('dh-status-'+i); if(b) b.textContent='✓ Set'; })">⏰ Edit</button> <span id="dh-status-${ri}" style="font-size:12px;color:#067D62;">${DeliveryHoursEditor.schedules[ri] ? "✓ Set" : ""}</span>`
+      }];
+      this._groupAssigner.render(area, data, fields, extraCols);
+    },
+
+    validate() {
+      if (!this._uploader || !this._uploader.confirmed) {
+        return { valid: false, errors: ["Please upload a file and confirm column mappings."] };
+      }
+      return { valid: true, errors: [] };
+    },
+
+    getData() {
+      return {
+        uploader: this._uploader ? this._uploader.getState() : null,
+        groupAssigner: this._groupAssigner ? this._groupAssigner.getState() : null,
+        deliverySchedules: { ...DeliveryHoursEditor.schedules },
+      };
+    },
+
+    setData(data) {
+      if (!data) return;
+      if (data.deliverySchedules) DeliveryHoursEditor.schedules = { ...data.deliverySchedules };
+      if (data.uploader && this._uploader) {
+        this._uploader.setState(data.uploader);
+        if (data.uploader.confirmed && data.uploader.mappedData && data.uploader.mappedData.length) {
+          const fields = [{key:"addressLine1",label:"Address Line 1"},{key:"addressLine2",label:"Address Line 2"},{key:"city",label:"City"},{key:"state",label:"State"},{key:"zip",label:"ZIP"},{key:"country",label:"Country"},{key:"label",label:"Address Label"}];
+          this._renderGroupAssigner(data.uploader.mappedData, fields);
+          if (data.groupAssigner && this._groupAssigner) this._groupAssigner.setState(data.groupAssigner);
+        }
+      }
+    },
+  };
+
+
+  /* ==========================================================
+     Helper: Table-Based Step Builder
+     ========================================================== */
+
+  function createTableStep(config) {
+    return {
+      id: config.id, label: config.label, categoryId: config.categoryId,
+      _data: {},
+
+      render(container) {
+        let html = `<h2>${CAT_ICONS[config.categoryId]} ${config.label}</h2>
+          <p class="step-description">${config.description}</p>`;
+        if (config.helpText) html += `<div style="background:#FFF9E6;border:1px solid #F0E0A0;border-radius:6px;padding:12px;margin-bottom:20px;font-size:13px;">${config.helpText}</div>`;
+
+        config.sections.forEach(sec => {
+          html += `<div style="margin-bottom:24px;">`;
+          if (sec.title) html += `<h3 style="margin-bottom:8px;font-size:16px;">${sec.title}</h3>`;
+          if (sec.subtitle) html += `<p style="font-size:13px;color:#666;margin-bottom:12px;">${sec.subtitle}</p>`;
+
+          if (sec.type === "table") {
+            html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;" id="tbl-${sec.key}">
+              <thead><tr>${sec.columns.map(c => `<th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;white-space:nowrap;">${c.label}${c.required ? ' <span style="color:#D13212;">*</span>' : ""}</th>`).join("")}<th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;width:40px;"></th></tr></thead>
+              <tbody id="tbody-${sec.key}"></tbody></table></div>
+              <button class="btn btn-sm btn-secondary" style="margin-top:8px;" onclick="document.getElementById('tbody-${sec.key}').insertAdjacentHTML('beforeend', categoryStepRegistry[${config.categoryId}]._buildRow('${sec.key}', ${JSON.stringify(sec.columns).replace(/"/g, "&quot;")}))">+ Add Row</button>`;
+          } else if (sec.type === "form") {
+            sec.fields.forEach(f => {
+              html += `<div class="form-group" id="fg-${config.id}-${f.key}">
+                <label>${f.label}${f.required ? ' <span class="required">*</span>' : ""}</label>`;
+              if (f.inputType === "select") {
+                html += `<select id="inp-${config.id}-${f.key}" style="width:100%;padding:10px 12px;border:1px solid #CCC;border-radius:4px;font-size:14px;min-height:44px;">
+                  <option value="">— Select —</option>${(f.options || []).map(o => `<option value="${o}">${o}</option>`).join("")}</select>`;
+              } else if (f.inputType === "textarea") {
+                html += `<textarea id="inp-${config.id}-${f.key}" rows="3" style="width:100%;padding:10px 12px;border:1px solid #CCC;border-radius:4px;font-size:14px;" placeholder="${f.placeholder || ""}"></textarea>`;
+              } else {
+                html += `<input type="${f.inputType || "text"}" id="inp-${config.id}-${f.key}" placeholder="${f.placeholder || ""}" style="width:100%;padding:10px 12px;border:1px solid #CCC;border-radius:4px;font-size:14px;min-height:44px;">`;
+              }
+              html += `<div class="error-msg" id="err-${config.id}-${f.key}">${f.label} is required</div></div>`;
+            });
+          }
+          html += `</div>`;
+        });
+        container.innerHTML = html;
+        // Wire live error clearing
+        container.querySelectorAll("input, select, textarea").forEach(el => {
+          el.addEventListener("input", () => { const fg = el.closest(".form-group"); if (fg) fg.classList.remove("has-error"); });
+          el.addEventListener("change", () => { const fg = el.closest(".form-group"); if (fg) fg.classList.remove("has-error"); });
+        });
+      },
+
+      _buildRow(secKey, columns) {
+        const cols = typeof columns === "string" ? JSON.parse(columns) : columns;
+        let html = "<tr>";
+        cols.forEach(c => {
+          if (c.inputType === "select") {
+            html += `<td style="border:1px solid #EEE;padding:2px 4px;"><select style="width:100%;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;" data-col="${c.key}"><option value="">—</option>${(c.options || []).map(o => `<option value="${o}">${o}</option>`).join("")}</select></td>`;
+          } else {
+            html += `<td style="border:1px solid #EEE;padding:2px 4px;"><input type="${c.inputType || "text"}" style="width:100%;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;" data-col="${c.key}" placeholder="${c.placeholder || ""}"></td>`;
+          }
+        });
+        html += `<td style="border:1px solid #EEE;padding:2px 4px;text-align:center;"><button onclick="this.closest('tr').remove()" style="background:none;border:none;color:#D13212;cursor:pointer;font-size:16px;min-width:32px;min-height:32px;">✕</button></td></tr>`;
+        return html;
+      },
+
+      _readTable(secKey) {
+        const tbody = document.getElementById("tbody-" + secKey);
+        if (!tbody) return [];
+        const rows = [];
+        tbody.querySelectorAll("tr").forEach(tr => {
+          const row = {};
+          tr.querySelectorAll("input, select").forEach(el => { row[el.dataset.col] = el.value; });
+          rows.push(row);
+        });
+        return rows;
+      },
+
+      _writeTable(secKey, data, columns) {
+        const tbody = document.getElementById("tbody-" + secKey);
+        if (!tbody || !data) return;
+        data.forEach(row => {
+          const tr = document.createElement("tr");
+          let html = "";
+          columns.forEach(c => {
+            const val = row[c.key] || "";
+            if (c.inputType === "select") {
+              html += `<td style="border:1px solid #EEE;padding:2px 4px;"><select style="width:100%;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;" data-col="${c.key}"><option value="">—</option>${(c.options || []).map(o => `<option value="${o}" ${val === o ? "selected" : ""}>${o}</option>`).join("")}</select></td>`;
+            } else {
+              html += `<td style="border:1px solid #EEE;padding:2px 4px;"><input type="${c.inputType || "text"}" style="width:100%;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;" data-col="${c.key}" value="${(val).replace(/"/g, "&quot;")}" placeholder="${c.placeholder || ""}"></td>`;
+            }
+          });
+          html += `<td style="border:1px solid #EEE;padding:2px 4px;text-align:center;"><button onclick="this.closest('tr').remove()" style="background:none;border:none;color:#D13212;cursor:pointer;font-size:16px;min-width:32px;min-height:32px;">✕</button></td>`;
+          tr.innerHTML = html;
+          tbody.appendChild(tr);
+        });
+      },
+
+      validate() {
+        const errors = [];
+        config.sections.forEach(sec => {
+          if (sec.type === "form") {
+            sec.fields.forEach(f => {
+              if (f.required) {
+                const el = document.getElementById("inp-" + config.id + "-" + f.key);
+                if (el && !el.value.trim()) {
+                  const fg = document.getElementById("fg-" + config.id + "-" + f.key);
+                  if (fg) fg.classList.add("has-error");
+                  errors.push(f.label + " is required");
+                }
+                if (el && f.inputType === "email" && el.value.trim() && !VALIDATION_RULES.email(el.value)) {
+                  const fg = document.getElementById("fg-" + config.id + "-" + f.key);
+                  if (fg) { fg.classList.add("has-error"); fg.querySelector(".error-msg").textContent = "Please enter a valid email address"; }
+                  errors.push("Invalid email: " + f.label);
+                }
+              }
+            });
+          }
+        });
+        if (errors.length) { const fe = document.querySelector(".has-error"); if (fe) fe.scrollIntoView({behavior:"smooth",block:"center"}); }
+        return { valid: errors.length === 0, errors };
+      },
+
+      getData() {
+        const d = {};
+        config.sections.forEach(sec => {
+          if (sec.type === "table") d[sec.key] = this._readTable(sec.key);
+          else if (sec.type === "form") {
+            sec.fields.forEach(f => {
+              const el = document.getElementById("inp-" + config.id + "-" + f.key);
+              if (el) d[f.key] = el.value;
+            });
+          }
+        });
+        return d;
+      },
+
+      setData(data) {
+        if (!data) return;
+        config.sections.forEach(sec => {
+          if (sec.type === "table" && data[sec.key]) this._writeTable(sec.key, data[sec.key], sec.columns);
+          else if (sec.type === "form") {
+            sec.fields.forEach(f => {
+              const el = document.getElementById("inp-" + config.id + "-" + f.key);
+              if (el && data[f.key] !== undefined) el.value = data[f.key];
+            });
+          }
+        });
+      },
+    };
+  }
+
+
+  /* ==========================================================
+     TASK 11.1 — Order Checkout Fields (Category 2)
+     ========================================================== */
+
+  const BOI_FIELD_NAMES = ["PO Number","GL Code","Cost Center","Location","Project Code","Department","Custom Field #1","Custom Field #2","Custom Field #3","Custom Field #4","Custom Field #5","Custom Field #6","Custom Field #7","Custom Field #8","Custom Field #9","Custom Field #10","Custom Field #11","Custom Field #12","Custom Field #13"];
+
+  const OrderCheckoutStep = {
+    id: "cat-2", label: CAT_NAMES[2], categoryId: 2,
+    _boiRootData: [], _boiGroupData: [],
+
+    _getGroupPaths() {
+      const md = StateStore.state.masterData || {};
+      const root = md.rootGroupPath || "Root";
+      const paths = [root];
+      (md.groups || []).forEach(g => { if (g.fullPath) paths.push(g.fullPath); });
+      return paths;
+    },
+
+    render(container) {
+      const paths = this._getGroupPaths();
+      container.innerHTML = `
+        <h2>${CAT_ICONS[2]} ${CAT_NAMES[2]}</h2>
+        <p class="step-description">Define custom fields that buyers must fill in at checkout — like PO numbers, cost centers, or GL codes. These are called Business Order Information (BOI) fields.</p>
+        <div style="background:#FFF9E6;border:1px solid #F0E0A0;border-radius:6px;padding:12px;margin-bottom:20px;font-size:13px;">
+          <strong>BOI</strong> = Business Order Information — custom data fields attached to every order for tracking and reporting.<br>
+          <strong>Name for Custom Field</strong> only appears when a Custom Field is selected. Max 30 characters.
+        </div>
+
+        <h3 style="margin-bottom:8px;font-size:16px;">BOI Root Level</h3>
+        <p style="font-size:13px;color:#666;margin-bottom:12px;">Fields applied at the root (company-wide) level.</p>
+        <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;" id="tbl-boiRoot">
+          <thead><tr>
+            <th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;">Label</th>
+            <th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;" id="th-customName">Name for Custom Field</th>
+            <th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;">Enabled?</th>
+            <th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;">Required?</th>
+            <th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;">Free form or preset?</th>
+            <th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;">Buyer Options (preset, semi-colon sep.)</th>
+            <th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;width:40px;"></th>
+          </tr></thead>
+          <tbody id="tbody-boiRoot"></tbody>
+        </table></div>
+        <button class="btn btn-sm btn-secondary" style="margin-top:8px;" onclick="OrderCheckoutStep._addRootRow()">+ Add Row</button>
+
+        <hr style="margin:24px 0;border:none;border-top:1px solid #EEE;">
+
+        <h3 style="margin-bottom:8px;font-size:16px;">BOI Group Level</h3>
+        <p style="font-size:13px;color:#666;margin-bottom:12px;">Fields applied at specific group levels. Output generates a separate tab.</p>
+        <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;" id="tbl-boiGroup">
+          <thead><tr>
+            <th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;">Group Path</th>
+            <th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;">BOI Field</th>
+            <th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;">Label (max 30)</th>
+            <th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;">Enabled</th>
+            <th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;">Required</th>
+            <th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;">Display Type</th>
+            <th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;">Buyer Options (preset, semi-colon sep.)</th>
+            <th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;">Default Option</th>
+            <th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;">Priority (1-19)</th>
+            <th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;">Operation</th>
+            <th style="border:1px solid #DDD;padding:6px 8px;background:#F5F5F5;width:40px;"></th>
+          </tr></thead>
+          <tbody id="tbody-boiGroup"></tbody>
+        </table></div>
+        <button class="btn btn-sm btn-secondary" style="margin-top:8px;" onclick="OrderCheckoutStep._addGroupRow()">+ Add Row</button>
+      `;
+    },
+
+    _addRootRow(data) {
+      const d = data || {};
+      const isCustom = (d.label || "").startsWith("Custom");
+      const tbody = document.getElementById("tbody-boiRoot");
+      const tr = document.createElement("tr");
+      const rowId = "boir-" + Date.now() + "-" + Math.random().toString(36).substr(2,4);
+      tr.id = rowId;
+      tr.innerHTML = `
+        <td style="border:1px solid #EEE;padding:2px 4px;">
+          <select data-col="label" style="width:100%;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;" onchange="OrderCheckoutStep._onLabelChange(this)">
+            <option value="">—</option>
+            ${BOI_FIELD_NAMES.map(n => `<option value="${n}" ${d.label === n ? "selected" : ""}>${n}</option>`).join("")}
+          </select>
+        </td>
+        <td style="border:1px solid #EEE;padding:2px 4px;" class="custom-name-cell">
+          <input type="text" data-col="customFieldName" value="${isCustom ? (d.customFieldName || "") : "N/A"}" placeholder="Custom field name (max 30)" maxlength="30" style="width:100%;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;${isCustom ? "" : "background:#F0F0F0;color:#999;"}" ${isCustom ? "" : "readonly"}>
+        </td>
+        <td style="border:1px solid #EEE;padding:2px 4px;">
+          <select data-col="enabled" style="width:100%;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;">
+            <option value="Yes" ${d.enabled === "No" ? "" : "selected"}>Yes</option>
+            <option value="No" ${d.enabled === "No" ? "selected" : ""}>No</option>
+          </select>
+        </td>
+        <td style="border:1px solid #EEE;padding:2px 4px;">
+          <select data-col="required" style="width:100%;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;">
+            <option value="Yes" ${d.required === "No" ? "" : "selected"}>Yes</option>
+            <option value="No" ${d.required === "No" ? "selected" : ""}>No</option>
+          </select>
+        </td>
+        <td style="border:1px solid #EEE;padding:2px 4px;">
+          <select data-col="fieldType" style="width:100%;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;" onchange="OrderCheckoutStep._onFieldTypeChange(this)">
+            <option value="Free Form" ${d.fieldType === "Preset list" ? "" : "selected"}>Free Form</option>
+            <option value="Preset list" ${d.fieldType === "Preset list" ? "selected" : ""}>Preset list</option>
+          </select>
+        </td>
+        <td style="border:1px solid #EEE;padding:2px 4px;" class="buyer-options-cell">
+          <input type="text" data-col="buyerOptions" value="${d.buyerOptions || ""}" placeholder="e.g. GL001;GL002;GL003" style="width:100%;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;${d.fieldType === "Preset list" ? "" : "background:#F0F0F0;color:#999;"}" ${d.fieldType === "Preset list" ? "" : "readonly"}>
+        </td>
+        <td style="border:1px solid #EEE;padding:2px 4px;text-align:center;">
+          <button onclick="this.closest('tr').remove()" style="background:none;border:none;color:#D13212;cursor:pointer;font-size:16px;min-width:32px;min-height:32px;">✕</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+      // Fix the custom name cell visibility after innerHTML
+      this._onLabelChange(tr.querySelector('[data-col="label"]'));
+    },
+
+    _onLabelChange(sel) {
+      const tr = sel.closest("tr");
+      const cell = tr.querySelector(".custom-name-cell");
+      if (!cell) return;
+      const inp = cell.querySelector("input");
+      if (!inp) return;
+      if (sel.value.startsWith("Custom")) {
+        inp.readOnly = false;
+        inp.style.background = "";
+        inp.style.color = "";
+        if (inp.value === "N/A") inp.value = "";
+        inp.placeholder = "Custom field name (max 30)";
+      } else {
+        inp.readOnly = true;
+        inp.style.background = "#F0F0F0";
+        inp.style.color = "#999";
+        inp.value = "N/A";
+      }
+    },
+
+    _addGroupRow(data) {
+      const d = data || {};
+      const paths = this._getGroupPaths();
+      const isCustom = (d.fieldName || "").startsWith("Custom");
+      const tbody = document.getElementById("tbody-boiGroup");
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td style="border:1px solid #EEE;padding:2px 4px;">
+          <select data-col="groupPath" style="width:100%;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;">
+            <option value="">— Select Group —</option>
+            ${paths.map(p => `<option value="${p}" ${d.groupPath === p ? "selected" : ""}>${p}</option>`).join("")}
+          </select>
+        </td>
+        <td style="border:1px solid #EEE;padding:2px 4px;">
+          <select data-col="fieldName" style="width:100%;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;" onchange="OrderCheckoutStep._onGroupLabelChange(this)">
+            <option value="">—</option>
+            ${BOI_FIELD_NAMES.map(n => `<option value="${n}" ${d.fieldName === n ? "selected" : ""}>${n}</option>`).join("")}
+          </select>
+        </td>
+        <td style="border:1px solid #EEE;padding:2px 4px;" class="grp-custom-name-cell">
+          <input type="text" data-col="fieldLabel" value="${isCustom ? (d.fieldLabel || "") : "N/A"}" placeholder="Label (max 30)" maxlength="30" style="width:100%;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;${isCustom ? "" : "background:#F0F0F0;color:#999;"}" ${isCustom ? "" : "readonly"}>
+        </td>
+        <td style="border:1px solid #EEE;padding:2px 4px;">
+          <select data-col="enabled" style="width:100%;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;">
+            <option value="Yes" ${d.enabled === "No" ? "" : "selected"}>Yes</option><option value="No" ${d.enabled === "No" ? "selected" : ""}>No</option>
+          </select>
+        </td>
+        <td style="border:1px solid #EEE;padding:2px 4px;">
+          <select data-col="required" style="width:100%;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;">
+            <option value="Yes" ${d.required === "No" ? "" : "selected"}>Yes</option><option value="No" ${d.required === "No" ? "selected" : ""}>No</option>
+          </select>
+        </td>
+        <td style="border:1px solid #EEE;padding:2px 4px;">
+          <select data-col="fieldType" style="width:100%;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;" onchange="OrderCheckoutStep._onFieldTypeChange(this)">
+            <option value="FREEFORM" ${d.fieldType === "FREEFORM" || !d.fieldType ? "selected" : ""}>FREEFORM</option>
+            <option value="PRESET_LIST" ${d.fieldType === "PRESET_LIST" ? "selected" : ""}>PRESET_LIST</option>
+            <option value="PRESET_LIST_WITH_FREEFORM_OPTION" ${d.fieldType === "PRESET_LIST_WITH_FREEFORM_OPTION" ? "selected" : ""}>PRESET_LIST_WITH_FREEFORM</option>
+          </select>
+        </td>
+        <td style="border:1px solid #EEE;padding:2px 4px;" class="buyer-options-cell">
+          <input type="text" data-col="buyerOptions" value="${d.buyerOptions || ""}" placeholder="e.g. GL001;GL002;GL003" style="width:100%;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;${(d.fieldType && d.fieldType !== "FREEFORM") ? "" : "background:#F0F0F0;color:#999;"}" ${(d.fieldType && d.fieldType !== "FREEFORM") ? "" : "readonly"}>
+        </td>
+        <td style="border:1px solid #EEE;padding:2px 4px;">
+          <input type="text" data-col="defaultOption" value="${d.defaultOption || ""}" placeholder="Optional (max 30)" maxlength="30" style="width:100%;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;">
+        </td>
+        <td style="border:1px solid #EEE;padding:2px 4px;">
+          <input type="text" data-col="displayPriority" value="${d.displayPriority || ""}" placeholder="1-19" style="width:60px;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;">
+        </td>
+        <td style="border:1px solid #EEE;padding:2px 4px;">
+          <select data-col="operation" style="width:100%;padding:4px;border:1px solid #CCC;border-radius:3px;font-size:13px;min-height:32px;">
+            <option value="ADD" selected>ADD</option>
+          </select>
+        </td>
+        <td style="border:1px solid #EEE;padding:2px 4px;text-align:center;">
+          <button onclick="this.closest('tr').remove()" style="background:none;border:none;color:#D13212;cursor:pointer;font-size:16px;min-width:32px;min-height:32px;">✕</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+      this._onGroupLabelChange(tr.querySelector('[data-col="fieldName"]'));
+      this._onFieldTypeChange(tr.querySelector('[data-col="fieldType"]'));
+    },
+
+    _onGroupLabelChange(sel) {
+      const tr = sel.closest("tr");
+      const cell = tr.querySelector(".grp-custom-name-cell");
+      if (!cell) return;
+      const inp = cell.querySelector("input");
+      if (!inp) return;
+      if (sel.value.startsWith("Custom")) {
+        inp.readOnly = false;
+        inp.style.background = "";
+        inp.style.color = "";
+        if (inp.value === "N/A") inp.value = "";
+        inp.placeholder = "Label (max 30)";
+      } else {
+        inp.readOnly = true;
+        inp.style.background = "#F0F0F0";
+        inp.style.color = "#999";
+        inp.value = "N/A";
+      }
+    },
+
+    _onFieldTypeChange(sel) {
+      const tr = sel.closest("tr");
+      const cell = tr.querySelector(".buyer-options-cell");
+      if (!cell) return;
+      const inp = cell.querySelector("input");
+      if (!inp) return;
+      const val = sel.value;
+      // "Free Form" or "FREEFORM" = gray out buyer options
+      if (val === "Free Form" || val === "FREEFORM") {
+        inp.readOnly = true;
+        inp.style.background = "#F0F0F0";
+        inp.style.color = "#999";
+        inp.value = "N/A";
+      } else {
+        inp.readOnly = false;
+        inp.style.background = "";
+        inp.style.color = "";
+        if (inp.value === "N/A") inp.value = "";
+        inp.placeholder = "e.g. GL001;GL002;GL003";
+      }
+    },
+
+    _readTable(tbodyId) {
+      const tbody = document.getElementById(tbodyId);
+      if (!tbody) return [];
+      const rows = [];
+      tbody.querySelectorAll("tr").forEach(tr => {
+        const row = {};
+        tr.querySelectorAll("input, select").forEach(el => {
+          if (el.dataset.col) row[el.dataset.col] = el.value;
+        });
+        rows.push(row);
+      });
+      return rows;
+    },
+
+    validate() { return { valid: true, errors: [] }; },
+
+    getData() {
+      return {
+        boiRoot: this._readTable("tbody-boiRoot"),
+        boiGroup: this._readTable("tbody-boiGroup"),
+      };
+    },
+
+    setData(data) {
+      if (!data) return;
+      if (data.boiRoot) data.boiRoot.forEach(r => this._addRootRow(r));
+      if (data.boiGroup) data.boiGroup.forEach(r => this._addGroupRow(r));
+    },
+  };
+
+  /* ==========================================================
+     TASK 11.2 — Spending Approvals & Controls (Category 3)
+     ========================================================== */
+
+  const SpendingApprovalsStep = createTableStep({
+    id: "cat-3", label: CAT_NAMES[3], categoryId: 3,
+    description: "Set up spending approval workflows. Require manager sign-off for orders above a threshold, or restrict purchases by product category or keyword.",
+    helpText: "<strong>UNSPSC</strong> = United Nations Standard Products and Services Code — a global classification system for products and services.",
+    sections: [
+      { title: "Approvals", key: "approvals", type: "table",
+        columns: [
+          {key:"groupPath",label:"Group Path",placeholder:"e.g. Acme Corp/Finance"},
+          {key:"approverEmail",label:"Approver Email",placeholder:"approver@company.com",inputType:"email"},
+          {key:"policyType",label:"Policy Type",inputType:"select",options:["Spending Limit"]},
+          {key:"appScope",label:"Application Scope",inputType:"select",options:["GROUP_ONLY","GROUP_AND_SUBGROUPS"]},
+          {key:"threshold",label:"Threshold ($)",placeholder:"e.g. 500",inputType:"text"}
+        ]},
+      { title: "Custom Approvals", key: "customApprovals", type: "table",
+        columns: [
+          {key:"groupPath",label:"Group Path",placeholder:"Group path"},
+          {key:"approverEmail",label:"Approver Email",placeholder:"approver@company.com",inputType:"email"},
+          {key:"policyType",label:"Policy Type",inputType:"select",options:["Spending Limit"]},
+          {key:"appScope",label:"Application Scope",inputType:"select",options:["GROUP_ONLY","GROUP_AND_SUBGROUPS"]},
+          {key:"threshold",label:"Threshold ($)",placeholder:"e.g. 1000"}
+        ]},
+      { title: "Spending Limits by Category", key: "spendingLimits", type: "table",
+        columns: [
+          {key:"groupPath",label:"Group Path",placeholder:"Group path"},
+          {key:"category",label:"Category",placeholder:"e.g. Office Supplies"},
+          {key:"limit",label:"Limit ($)",placeholder:"e.g. 200"}
+        ]},
+      { title: "UNSPSC Restrict or Block", key: "unspscRestrict", type: "table",
+        columns: [
+          {key:"groupPath",label:"Group Path",placeholder:"Group path"},
+          {key:"unspscCode",label:"UNSPSC Code",placeholder:"e.g. 44121600"},
+          {key:"action",label:"Action",inputType:"select",options:["Restrict","Block"]}
+        ]},
+      { title: "Restrict Products by Keyword", key: "keywordRestrict", type: "table",
+        columns: [
+          {key:"groupPath",label:"Group Path",placeholder:"Group path"},
+          {key:"keyword",label:"Keyword",placeholder:"e.g. alcohol"}
+        ]}
+    ]
+  });
+
+  /* ==========================================================
+     TASK 11.3 — Invoicing (Category 4)
+     ========================================================== */
+
+  const InvoicingStep = {
+    id: "cat-4", label: CAT_NAMES[4], categoryId: 4,
+    _invoiceRows: [],
+
+    _getGroupPaths() {
+      const md = StateStore.state.masterData || {};
+      const root = md.rootGroupPath || "Root";
+      const paths = [root];
+      (md.groups || []).forEach(g => { if (g.fullPath) paths.push(g.fullPath); });
+      return paths;
+    },
+
+    render(container) {
+      const mp = (StateStore.state.masterData || {}).marketplace || "US";
+      const companyName = (StateStore.state.masterData || {}).companyName || "";
+      const isUS = mp === "US";
+      const templateType = isUS ? "US" : "CA";
+      const paths = this._getGroupPaths();
+
+      container.innerHTML = `
+        <h2>${CAT_ICONS[4]} ${CAT_NAMES[4]}</h2>
+        <p class="step-description">Invoice templates are created at the group level. Select which groups need an invoice template, then fill in the billing address and preferences for each.</p>
+        <div style="background:#FFF9E6;border:1px solid #F0E0A0;border-radius:6px;padding:12px;margin-bottom:20px;font-size:13px;">
+          Marketplace: <strong>${mp}</strong> — generating ${templateType} invoice templates.
+        </div>
+
+        <div style="background:#F0F7FF;border:1px solid #D0E3F7;border-radius:6px;padding:14px;margin-bottom:20px;">
+          <strong>Which groups need invoice templates?</strong>
+          <p style="font-size:13px;color:#555;margin:8px 0;">Check each group that should have its own invoice template. Each selected group will get its own billing address and invoice settings.</p>
+          <div id="invoiceGroupSelector" style="margin-top:8px;"></div>
+        </div>
+
+        <div id="invoiceFormsArea"></div>
+      `;
+
+      // Render group checkboxes
+      const selector = document.getElementById("invoiceGroupSelector");
+      paths.forEach((p, i) => {
+        const div = document.createElement("div");
+        div.style.cssText = "display:flex;align-items:center;gap:10px;padding:6px 0;";
+        div.innerHTML = `
+          <input type="checkbox" id="inv-grp-${i}" value="${p}" style="width:18px;height:18px;accent-color:#E47911;">
+          <label for="inv-grp-${i}" style="font-size:14px;cursor:pointer;">${p}</label>
+        `;
+        div.querySelector("input").addEventListener("change", () => this._rebuildForms());
+        selector.appendChild(div);
+      });
+    },
+
+    _rebuildForms() {
+      const area = document.getElementById("invoiceFormsArea");
+      area.innerHTML = "";
+      const mp = (StateStore.state.masterData || {}).marketplace || "US";
+      const companyName = (StateStore.state.masterData || {}).companyName || "";
+      const checked = [];
+      document.querySelectorAll("#invoiceGroupSelector input:checked").forEach(cb => checked.push(cb.value));
+
+      if (checked.length === 0) {
+        area.innerHTML = '<p style="color:#999;font-size:13px;margin-top:12px;">Select at least one group above to configure invoice templates.</p>';
+        return;
+      }
+
+      // Edit 2: Gather uploaded addresses from Shipping Addresses step
+      const uploadedAddresses = this._getUploadedAddresses();
+
+      checked.forEach((groupPath, idx) => {
+        const existing = this._invoiceRows.find(r => r.groupPath === groupPath) || {};
+        const formId = "inv-form-" + idx;
+        const div = document.createElement("div");
+        div.style.cssText = "border:1px solid #DDD;border-radius:8px;padding:20px;margin-bottom:16px;background:#FAFAFA;";
+
+        // Build address picker dropdown HTML
+        let addrPickerHtml = "";
+        if (uploadedAddresses.length > 0) {
+          addrPickerHtml = `
+            <div style="margin-bottom:14px;padding:10px 12px;background:#F0F7FF;border:1px solid #D0E3F7;border-radius:6px;">
+              <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Pre-fill from uploaded address:</label>
+              <select id="${formId}-addrPicker" style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
+                <option value="">— Type manually —</option>
+                ${uploadedAddresses.map((a, ai) => {
+                  const summary = [a.addressLine1, a.city, a.state, a.zip].filter(Boolean).join(", ");
+                  return `<option value="${ai}">${summary || "Address " + (ai + 1)}</option>`;
+                }).join("")}
+              </select>
+            </div>`;
+        }
+
+        div.innerHTML = `
+          <h4 style="margin-bottom:12px;color:#232F3E;">📧 Invoice Template — ${groupPath}</h4>
+          ${addrPickerHtml}
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="form-group" style="margin-bottom:8px;">
+              <label style="font-size:13px;">Business Name</label>
+              <input type="text" id="${formId}-companyName" value="${existing.companyName || companyName}" style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
+            </div>
+            <div class="form-group" style="margin-bottom:8px;">
+              <label style="font-size:13px;">Invoice Template Name</label>
+              <input type="text" id="${formId}-templateName" value="${existing.templateName || groupPath + " Invoice"}" placeholder="Optional" style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
+            </div>
+            <div class="form-group" style="margin-bottom:8px;">
+              <label style="font-size:13px;">Street Address <span class="required">*</span></label>
+              <input type="text" id="${formId}-address" value="${existing.address || ""}" placeholder="123 Main St" style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
+              <div class="error-msg">Address is required</div>
+            </div>
+            <div class="form-group" style="margin-bottom:8px;">
+              <label style="font-size:13px;">Address Line 2</label>
+              <input type="text" id="${formId}-address2" value="${existing.address2 || ""}" placeholder="Suite, Floor, etc." style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
+            </div>
+            <div class="form-group" style="margin-bottom:8px;">
+              <label style="font-size:13px;">City</label>
+              <input type="text" id="${formId}-city" value="${existing.city || ""}" placeholder="City" style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
+            </div>
+            <div class="form-group" style="margin-bottom:8px;">
+              <label style="font-size:13px;">State/Province</label>
+              <input type="text" id="${formId}-state" value="${existing.state || ""}" placeholder="State" style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
+            </div>
+            <div class="form-group" style="margin-bottom:8px;">
+              <label style="font-size:13px;">ZIP/Postal Code</label>
+              <input type="text" id="${formId}-zip" value="${existing.zip || ""}" placeholder="ZIP" style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
+            </div>
+            <div class="form-group" style="margin-bottom:8px;">
+              <label style="font-size:13px;">Country</label>
+              <select id="${formId}-country" style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
+                <option value="US" ${(existing.country || mp) === "US" ? "selected" : ""}>US</option>
+                <option value="CA" ${(existing.country || mp) === "CA" ? "selected" : ""}>CA</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:8px;">
+              <label style="font-size:13px;">Invoice Email</label>
+              <input type="email" id="${formId}-email" value="${existing.email || ""}" placeholder="invoices@company.com" style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
+            </div>
+            <div class="form-group" style="margin-bottom:8px;">
+              <label style="font-size:13px;">Payment Terms</label>
+              <input type="text" id="${formId}-paymentTerms" value="${existing.paymentTerms || ""}" placeholder="e.g. Net 30" style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
+            </div>
+          </div>
+        `;
+        area.appendChild(div);
+
+        // Wire address picker change event
+        if (uploadedAddresses.length > 0) {
+          const picker = document.getElementById(formId + "-addrPicker");
+          if (picker) {
+            picker.addEventListener("change", () => {
+              const val = picker.value;
+              if (val === "") return; // "Type manually" selected
+              const addr = uploadedAddresses[parseInt(val, 10)];
+              if (!addr) return;
+              const fieldMap = {
+                address: "addressLine1",
+                address2: "addressLine2",
+                city: "city",
+                state: "state",
+                zip: "zip",
+                country: "country"
+              };
+              Object.entries(fieldMap).forEach(([formField, addrField]) => {
+                const el = document.getElementById(formId + "-" + formField);
+                if (el && addr[addrField]) el.value = addr[addrField];
+              });
+            });
+          }
+        }
+      });
+    },
+
+    _getUploadedAddresses() {
+      // Read uploaded addresses from Shipping Addresses step data
+      const stepData = StateStore.state.stepData || {};
+      const addrData = stepData["cat-1"];
+      if (addrData && addrData.uploader && addrData.uploader.mappedData) {
+        return addrData.uploader.mappedData;
+      }
+      return [];
+    },
+
+    validate() {
+      const errors = [];
+      const checked = [];
+      document.querySelectorAll("#invoiceGroupSelector input:checked").forEach(cb => checked.push(cb.value));
+      if (checked.length === 0) {
+        errors.push("Please select at least one group for invoice templates");
+      }
+      // Check each form has an address
+      checked.forEach((_, idx) => {
+        const addr = document.getElementById("inv-form-" + idx + "-address");
+        if (addr && !addr.value.trim()) {
+          const fg = addr.closest(".form-group");
+          if (fg) fg.classList.add("has-error");
+          errors.push("Address is required for each invoice template");
+        }
+      });
+      return { valid: errors.length === 0, errors };
+    },
+
+    getData() {
+      const checked = [];
+      document.querySelectorAll("#invoiceGroupSelector input:checked").forEach(cb => checked.push(cb.value));
+      const rows = [];
+      checked.forEach((groupPath, idx) => {
+        const formId = "inv-form-" + idx;
+        const fields = ["companyName","templateName","address","address2","city","state","zip","country","email","paymentTerms"];
+        const row = { groupPath, marketplace: (StateStore.state.masterData || {}).marketplace || "US" };
+        fields.forEach(f => { const el = document.getElementById(formId + "-" + f); if (el) row[f] = el.value; });
+        rows.push(row);
+      });
+      this._invoiceRows = rows;
+      return { invoiceRows: rows, marketplace: (StateStore.state.masterData || {}).marketplace || "US" };
+    },
+
+    setData(data) {
+      if (!data || !data.invoiceRows) return;
+      this._invoiceRows = data.invoiceRows;
+      // Check the corresponding group checkboxes and rebuild forms
+      const paths = this._getGroupPaths();
+      data.invoiceRows.forEach(row => {
+        const idx = paths.indexOf(row.groupPath);
+        if (idx >= 0) {
+          const cb = document.getElementById("inv-grp-" + idx);
+          if (cb) cb.checked = true;
+        }
+      });
+      this._rebuildForms();
+    },
+  };
+
+
+  /* ==========================================================
+     TASK 11.4 — Blanket Purchase Orders (Category 5)
+     ========================================================== */
+
+  const BlanketPOStep = createTableStep({
+    id: "cat-5", label: CAT_NAMES[5], categoryId: 5,
+    description: "Set up Blanket Purchase Orders (BPOs) to pre-approve spending budgets for groups or projects with defined amounts and date ranges.",
+    helpText: "<strong>BPO</strong> = Blanket Purchase Order — a pre-approved spending budget with a set amount and time period.",
+    sections: [
+      { title: "BPO", key: "bpo", type: "table",
+        columns: [
+          {key:"groupPath",label:"Group Path",placeholder:"e.g. Acme Corp/Finance"},
+          {key:"poName",label:"PO Name",placeholder:"e.g. Q1 Office Supplies"},
+          {key:"poNumber",label:"PO Number",placeholder:"e.g. PO-2025-001"},
+          {key:"amount",label:"Amount ($)",placeholder:"e.g. 10000"},
+          {key:"startDate",label:"Start Date",placeholder:"YYYY-MM-DD",inputType:"text"},
+          {key:"endDate",label:"End Date",placeholder:"YYYY-MM-DD",inputType:"text"},
+          {key:"recurring",label:"Recurring",inputType:"select",options:["Yes","No"]},
+          {key:"frequency",label:"Frequency",inputType:"select",options:["Monthly","Weekly","Quarterly","Annually"]},
+          {key:"rollover",label:"Rollover",inputType:"select",options:["Yes","No"]}
+        ]},
+      { title: "BPO Allocation", subtitle: "Allocate BPO budgets to specific users.", key: "bpoAllocation", type: "table",
+        columns: [
+          {key:"poNumber",label:"PO Number",placeholder:"PO-2025-001"},
+          {key:"userEmail",label:"User Email",placeholder:"user@company.com",inputType:"email"},
+          {key:"allocatedAmount",label:"Allocated Amount ($)",placeholder:"e.g. 2000"}
+        ]}
+    ]
+  });
+
+  /* ==========================================================
+     TASK 11.5 — Preferred Products & Brands (Category 6)
+     ========================================================== */
+
+  const PreferredProductsStep = createTableStep({
+    id: "cat-6", label: CAT_NAMES[6], categoryId: 6,
+    description: "Highlight specific products (by ASIN) or brands so buyers see them first when shopping on Amazon Business.",
+    sections: [
+      { title: "Highlight List (ASINs)", subtitle: "Add specific product ASINs to highlight.", key: "highlightList", type: "table",
+        columns: [
+          {key:"asin",label:"ASIN",placeholder:"e.g. B0XXXXXXXXXX"},
+          {key:"groupPath",label:"Group Path (optional)",placeholder:"e.g. Acme Corp"}
+        ]},
+      { title: "Highlight Brands", subtitle: "Add brand names to highlight.", key: "highlightBrands", type: "table",
+        columns: [
+          {key:"brandName",label:"Brand Name",placeholder:"e.g. 3M"},
+          {key:"groupPath",label:"Group Path (optional)",placeholder:"e.g. Acme Corp"}
+        ]}
+    ]
+  });
+
+  /* ==========================================================
+     TASK 11.6 — Checkout Defaults (Category 7)
+     ========================================================== */
+
+  const CheckoutDefaultsStep = createTableStep({
+    id: "cat-7", label: CAT_NAMES[7], categoryId: 7,
+    description: "Set default shipping addresses and payment methods so buyers don't have to choose every time they check out.",
+    sections: [
+      { title: "Checkout Defaults", key: "checkoutDefaults", type: "table",
+        columns: [
+          {key:"groupPath",label:"Group Path",placeholder:"e.g. Acme Corp/Finance"},
+          {key:"settingName",label:"Setting",inputType:"select",options:["Default Shipping Address","Default Payment Method"]},
+          {key:"settingValue",label:"Value",placeholder:"e.g. 123 Main St or Visa ending 1234"}
+        ]}
+    ]
+  });
+
+  /* ==========================================================
+     TASK 11.7 — Business Giving (Category 8)
+     ========================================================== */
+
+  const BusinessGivingStep = createTableStep({
+    id: "cat-8", label: CAT_NAMES[8], categoryId: 8,
+    description: "Set up gift campaigns to distribute Amazon credit to employees or recipients — by group or individually.",
+    sections: [
+      { title: "Business Giving (Group)", key: "givingGroup", type: "table",
+        columns: [
+          {key:"campaignName",label:"Campaign Name",placeholder:"e.g. Holiday Gift"},
+          {key:"amount",label:"Amount ($)",placeholder:"e.g. 50"},
+          {key:"groupPath",label:"Group Path",placeholder:"e.g. Acme Corp/All"},
+          {key:"message",label:"Message",placeholder:"Happy Holidays!"}
+        ]},
+      { title: "Business Giving (Individual)", key: "givingIndividual", type: "table",
+        columns: [
+          {key:"campaignName",label:"Campaign Name",placeholder:"e.g. Welcome Gift"},
+          {key:"amount",label:"Amount ($)",placeholder:"e.g. 25"},
+          {key:"recipientEmail",label:"Recipient Email",placeholder:"user@company.com",inputType:"email"},
+          {key:"message",label:"Message",placeholder:"Welcome aboard!"}
+        ]}
+    ]
+  });
+
+  /* ==========================================================
+     TASK 11.8 — Tax Exemption (Category 9)
+     ========================================================== */
+
+  const TaxExemptionStep = createTableStep({
+    id: "cat-9", label: CAT_NAMES[9], categoryId: 9,
+    description: "Link your tax exemption certificates so qualifying purchases are automatically tax-free.",
+    helpText: "<strong>PBI</strong> = Pay By Invoice. <strong>MLE</strong> = Multi-Line Entity — a business account structure with multiple legal entities.",
+    sections: [
+      { title: "Tax Exemption Certificates", key: "taxExemptions", type: "table",
+        columns: [
+          {key:"certificateName",label:"Certificate Name",placeholder:"e.g. State Sales Tax Exempt"},
+          {key:"groupPath",label:"Group Path",placeholder:"e.g. Acme Corp"},
+          {key:"exemptionType",label:"Exemption Type",inputType:"select",options:["State Sales Tax","Federal Tax","Resale Certificate","Other"]}
+        ]}
+    ]
+  });
+
+
+  /* ==========================================================
+     Category Step Registry
+     ========================================================== */
+
+  const categoryStepRegistry = {
+    0: UsersGroupsStep,
+    1: ShippingAddressesStep,
+    2: OrderCheckoutStep,
+    3: SpendingApprovalsStep,
+    4: InvoicingStep,
+    5: BlanketPOStep,
+    6: PreferredProductsStep,
+    7: CheckoutDefaultsStep,
+    8: BusinessGivingStep,
+    9: TaxExemptionStep,
+  };
+
+
+  /* ==========================================================
+     TASK 12.1 — Validation System (inline error display)
+     Already wired into each step's validate() + live clearing.
+     This helper adds scroll-to-first-error behavior globally.
+     ========================================================== */
+
+  function showStepErrors(errors) {
+    if (!errors || !errors.length) return;
+    const firstErr = document.querySelector(".has-error");
+    if (firstErr) firstErr.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  /* ==========================================================
+     TASK 14.1 — Review & Generate Step
+     ========================================================== */
+
+  const ReviewStep = {
+    id: "review", label: "Review & Generate", categoryId: -1,
+
+    render(container) {
+      const md = StateStore.state.masterData || {};
+      const cats = StateStore.state.selectedCategories || [];
+      const stepData = StateStore.state.stepData || {};
+
+      let html = `<h2>📋 Review & Generate</h2>
+        <p class="step-description">Review your configuration before generating the output file.</p>
+
+        <div style="background:#F0F7FF;border:1px solid #D0E3F7;border-radius:6px;padding:16px;margin-bottom:20px;">
+          <h3 style="margin-bottom:8px;font-size:16px;">Master Data</h3>
+          <table style="font-size:14px;"><tbody>
+            <tr><td style="padding:4px 16px 4px 0;font-weight:600;">Company Name:</td><td>${md.companyName || "—"}</td></tr>
+            <tr><td style="padding:4px 16px 4px 0;font-weight:600;">Marketplace:</td><td>${md.marketplace || "—"}</td></tr>
+            <tr><td style="padding:4px 16px 4px 0;font-weight:600;">Root Group Path:</td><td>${md.rootGroupPath || "—"}</td></tr>
+            <tr><td style="padding:4px 16px 4px 0;font-weight:600;">Groups:</td><td>${(md.groups || []).map(g => g.fullPath).join(", ") || "None"}</td></tr>
+          </tbody></table>
+        </div>
+
+        <h3 style="margin-bottom:12px;font-size:16px;">Feature Categories</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;">
+          <thead><tr>
+            <th style="border:1px solid #DDD;padding:8px;background:#F5F5F5;text-align:left;">Category</th>
+            <th style="border:1px solid #DDD;padding:8px;background:#F5F5F5;text-align:center;">Rows</th>
+            <th style="border:1px solid #DDD;padding:8px;background:#F5F5F5;text-align:center;">Status</th>
+            <th style="border:1px solid #DDD;padding:8px;background:#F5F5F5;text-align:center;">Action</th>
+          </tr></thead><tbody>`;
+
+      let allComplete = true;
+      cats.sort((a, b) => a - b).forEach(catId => {
+        const stepId = "cat-" + catId;
+        const data = stepData[stepId] || {};
+        const rowCount = this._getRowCount(catId, data);
+        const isComplete = this._isComplete(catId, data);
+        if (!isComplete) allComplete = false;
+        const statusBadge = isComplete
+          ? `<span style="background:#E8F5E9;color:#067D62;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;">Complete</span>`
+          : `<span style="background:#FDE8E8;color:#D13212;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;">Incomplete</span>`;
+        const navLink = !isComplete
+          ? `<a href="#" onclick="event.preventDefault(); StepManager.goToStep(StepManager.steps.findIndex(s=>s.id==='${stepId}'))" style="color:#E47911;font-size:13px;">Go to step →</a>`
+          : `<span style="color:#999;font-size:13px;">—</span>`;
+        html += `<tr>
+          <td style="border:1px solid #EEE;padding:8px;">${CAT_ICONS[catId]} ${CAT_NAMES[catId]}</td>
+          <td style="border:1px solid #EEE;padding:8px;text-align:center;">${rowCount}</td>
+          <td style="border:1px solid #EEE;padding:8px;text-align:center;">${statusBadge}</td>
+          <td style="border:1px solid #EEE;padding:8px;text-align:center;">${navLink}</td>
+        </tr>`;
+      });
+      html += `</tbody></table>`;
+
+      html += `<div style="margin-top:24px;text-align:center;">
+        <button class="btn btn-primary" id="btnGenerate" style="padding:14px 40px;font-size:16px;" ${allComplete ? "" : ""}>
+          📥 Generate .xlsx File
+        </button>
+        ${!allComplete ? '<p style="color:#E47911;font-size:13px;margin-top:8px;">⚠ Some categories are incomplete. You can still generate, but the file may have missing data.</p>' : '<p style="color:#067D62;font-size:13px;margin-top:8px;">✓ All categories complete. Ready to generate!</p>'}
+      </div>`;
+
+      container.innerHTML = html;
+      document.getElementById("btnGenerate").addEventListener("click", () => {
+        if (!allComplete) {
+          if (!confirm("Some categories are incomplete. Generate anyway?")) return;
+        }
+        ExcelGenerator.generate();
+      });
+    },
+
+    _getRowCount(catId, data) {
+      if (catId === 0) return (data.uploader && data.uploader.mappedData) ? data.uploader.mappedData.length : 0;
+      if (catId === 1) return (data.uploader && data.uploader.mappedData) ? data.uploader.mappedData.length : 0;
+      if (catId === 2) return (data.boiRoot || []).length + (data.boiGroup || []).length;
+      if (catId === 3) return (data.approvals || []).length + (data.customApprovals || []).length + (data.spendingLimits || []).length + (data.unspscRestrict || []).length + (data.keywordRestrict || []).length;
+      if (catId === 4) return (data.invoiceRows || []).length;
+      if (catId === 5) return (data.bpo || []).length + (data.bpoAllocation || []).length;
+      if (catId === 6) return (data.highlightList || []).length + (data.highlightBrands || []).length;
+      if (catId === 7) return (data.checkoutDefaults || []).length;
+      if (catId === 8) return (data.givingGroup || []).length + (data.givingIndividual || []).length;
+      if (catId === 9) return (data.taxExemptions || []).length;
+      return 0;
+    },
+
+    _isComplete(catId, data) {
+      return this._getRowCount(catId, data) > 0;
+    },
+
+    validate() { return { valid: true, errors: [] }; },
+    getData() { return {}; },
+    setData() {},
+  };
+
+
+  /* ==========================================================
+     TASK 15.1 — Excel Generation Pipeline
+     ========================================================== */
+
+  const ExcelGenerator = {
+    // Edit 3: Required columns per tab name (0-based column indices)
+    REQUIRED_COLUMNS: {
+      "1a. Group Structure": [0, 1],                          // Group Name, Full Path
+      "2.User Upload List (without AA)": [0, 1, 2],          // Email, First Name, Last Name
+      "3. User Upload List (with AA)": [0, 1, 2],            // Email, First Name, Last Name
+      "5. Addresses": [0, 2, 3, 4],                          // Address Line 1, City, State, ZIP
+      "4a. BOI Root Level": [0, 2, 3, 4],                         // Label, Root or Group Path (auto), Enabled, Required
+      "4b. BOI Group Level ": [0, 1, 3],                         // Group Path, BOI Field, Enabled
+      "6a. Approvals": [0, 1, 2],                            // Group Path, Approver Email, Policy Type
+      "6a. Custom Approvals": [0, 1, 2],                     // Group Path, Approver Email, Policy Type
+      "7. Invoice Template US": [0, 3, 5, 6, 7, 8],         // Group Path, Street, City, State, ZIP, Country
+      "8. Invoice Template CA": [0, 3, 5, 6, 7, 8],         // Group Path, Street, City, State, ZIP, Country
+      "9. BPO": [0, 2, 3, 4, 5],                            // Group Path, PO Number, Amount, Start, End
+      "12. Highlight List": [0],                              // ASIN
+      "13. Highlight Brands": [0],                            // Brand Name
+      "14. Tax Exemption": [0, 1],                           // Certificate Name, Group Path
+    },
+
+    generate() {
+      const state = StateStore.state;
+      const md = state.masterData || {};
+      const cats = state.selectedCategories || [];
+      const stepData = state.stepData || {};
+      const wb = XLSX.utils.book_new();
+      const self = this;
+
+      // Helper: add a worksheet with headers and data rows
+      function addSheet(tabName, headers, rows) {
+        const requiredCols = self.REQUIRED_COLUMNS[tabName] || [];
+        const hasData = rows.length > 0;
+
+        // Prefix required headers with "* " and add status + note row
+        const styledHeaders = headers.map((h, i) => requiredCols.includes(i) ? "* " + h : h);
+        const statusText = hasData ? "✅ CONFIGURED — " + rows.length + " row(s)" : "⬜ NO DATA";
+        const noteRow = [statusText + "  |  Fields marked with * are required"];
+        while (noteRow.length < headers.length) noteRow.push("");
+
+        const wsData = [noteRow, styledHeaders, ...rows];
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+        // Tab color (Pro only, but set anyway for future compat)
+        if (TAB_COLORS[tabName]) {
+          ws["!tabColor"] = { rgb: TAB_COLORS[tabName] };
+        }
+
+        // Set column widths
+        ws["!cols"] = headers.map((h, i) => {
+          const baseLen = h.length;
+          if (h.toLowerCase().includes("path") || h.toLowerCase().includes("email") || h.toLowerCase().includes("address")) {
+            return { wch: Math.max(baseLen + 4, 30) };
+          }
+          return { wch: Math.max(baseLen + 4, 16) };
+        });
+
+        // Rename tab to include status indicator for quick visual scanning
+        const displayName = hasData ? "✓ " + tabName : tabName;
+        // Tab names have a 31-char limit in Excel
+        const safeName = displayName.length > 31 ? displayName.substring(0, 31) : displayName;
+
+        XLSX.utils.book_append_sheet(wb, ws, safeName);
+      }
+
+      const mp = md.marketplace || "US";
+
+      cats.sort((a, b) => a - b).forEach(catId => {
+        const data = stepData["cat-" + catId] || {};
+        const tabs = CATEGORY_TAB_MAP[catId] || [];
+
+        if (catId === 0) {
+          // ---- Category 0: Users & Groups ----
+          const groups = md.groups || [];
+          const root = md.rootGroupPath || "";
+          const groupAssignments = (data.groupAssigner && data.groupAssigner.assignments) || {};
+          const users = (data.uploader && data.uploader.mappedData) || [];
+
+          // 1a. Group Structure
+          addSheet("1a. Group Structure", ["Group Name", "Full Path", "Parent Group"],
+            groups.map(g => [g.name, g.fullPath, root])
+          );
+
+          // 1b. Group and User Restructure (empty template)
+          addSheet("1b. Group and User Restructure", ["Email Address", "Current Group Path", "New Group Path"], []);
+
+          // 2. User Upload List (without AA)
+          // Expand users into multiple rows based on multi-group+role assignments
+          const userRows = [];
+          users.forEach((u, i) => {
+            const assign = groupAssignments[i];
+            if (Array.isArray(assign) && assign.length > 0) {
+              // Multi-group+role: one row per group+role pair
+              assign.forEach(pair => {
+                userRows.push([
+                  u.email || "", u.firstName || "", u.lastName || "",
+                  pair.role || "Requisitioner",
+                  pair.group || root
+                ]);
+              });
+            } else if (typeof assign === "string" && assign) {
+              // Legacy single-group assignment
+              userRows.push([
+                u.email || "", u.firstName || "", u.lastName || "",
+                u.role || "Requisitioner",
+                assign
+              ]);
+            } else {
+              // No assignment — use root
+              userRows.push([
+                u.email || "", u.firstName || "", u.lastName || "",
+                u.role || "Requisitioner",
+                root
+              ]);
+            }
+          });
+
+          addSheet("2.User Upload List (without AA)",
+            ["Email Address", "First Name", "Last Name", "Role", "Group Path"],
+            userRows
+          );
+
+          // 3. User Upload List (with AA)
+          addSheet("3. User Upload List (with AA)",
+            ["Email Address", "First Name", "Last Name", "Role", "Group Path"],
+            []
+          );
+        }
+
+        else if (catId === 1) {
+          // ---- Category 1: Shipping Addresses ----
+          const addresses = (data.uploader && data.uploader.mappedData) || [];
+          const groupAssignments = (data.groupAssigner && data.groupAssigner.assignments) || {};
+          const schedules = data.deliverySchedules || {};
+          const root = md.rootGroupPath || "";
+
+          function formatSchedule(sched) {
+            if (!sched) return "";
+            const days = ["mon","tue","wed","thu","fri"];
+            return days.map(d => {
+              const s = sched[d] || ["09:00","17:00"];
+              return d.charAt(0).toUpperCase() + d.slice(1) + ": " + s[0] + "-" + s[1];
+            }).join("; ");
+          }
+
+          addSheet("5. Addresses",
+            ["Address Line 1","Address Line 2","City","State","ZIP","Country/Region","Address Label","Group Path","Delivery Hours"],
+            addresses.map((a, i) => [
+              a.addressLine1 || "", a.addressLine2 || "", a.city || "",
+              a.state || "", a.zip || "", a.country || mp,
+              a.label || "", groupAssignments[i] || root,
+              formatSchedule(schedules[i])
+            ])
+          );
+        }
+
+        else if (catId === 2) {
+          // ---- Category 2: Order Checkout Fields (BOI) ----
+          const boiRoot = data.boiRoot || [];
+          const boiGroup = data.boiGroup || [];
+
+          // 4a. BOI Root Level — matches original template: Label, Name for Custom Field, Root or Group Path, Enabled, Required, Free form or preset, Buyer Options
+          addSheet("4a. BOI Root Level",
+            ["Label (minimum 500 per label)","Name for Custom Field","Root or Group Path","Enabled? (Y/N)","Required? (Y/N)","Free form or preset list of options?","Buyer Options - preset list option only (separate by semi-colon)"],
+            boiRoot.map(r => [
+              r.label || "", r.customFieldName || "N/A",
+              md.rootGroupPath || "",
+              r.enabled || "Yes", r.required || "No",
+              r.fieldType || "Free Form", r.buyerOptions || "N/A"
+            ])
+          );
+
+          // 4b. BOI Group Level — separate tab matching the BOI Group Level template format
+          // Columns match the reference template: Group Path, BOI Field, Label, Enabled, Required, Display Type, Default Option, Display Priority, Operation
+          addSheet("4b. BOI Group Level ",
+            ["Group Path","BOI Field","Label (max 30 chars)","Enabled","Required","Display Type","Buyer Options (semi-colon separated)","Default Option","Display Priority","Operation"],
+            boiGroup.map(r => [
+              r.groupPath || "", r.fieldName || "", r.fieldLabel || "",
+              r.enabled || "Yes", r.required || "No",
+              r.fieldType || "FREEFORM", r.buyerOptions || "N/A", r.defaultOption || "", r.displayPriority || "",
+              r.operation || "ADD"
+            ])
+          );
+        }
+
+        else if (catId === 3) {
+          // ---- Category 3: Spending Approvals ----
+          const approvals = data.approvals || [];
+          const customApprovals = data.customApprovals || [];
+          const spendingLimits = data.spendingLimits || [];
+          const unspsc = data.unspscRestrict || [];
+          const keywords = data.keywordRestrict || [];
+
+          addSheet("6a. Approvals",
+            ["Group Path","Approver Email","Policy Type","Application Scope","Threshold"],
+            approvals.map(r => [r.groupPath || "", r.approverEmail || "", r.policyType || "Spending Limit", r.appScope || "GROUP_ONLY", r.threshold || ""])
+          );
+
+          addSheet("6a. Custom Approvals",
+            ["Group Path","Approver Email","Policy Type","Application Scope","Threshold"],
+            customApprovals.map(r => [r.groupPath || "", r.approverEmail || "", r.policyType || "Spending Limit", r.appScope || "GROUP_ONLY", r.threshold || ""])
+          );
+
+          addSheet("6b. Spending Limits Category",
+            ["Group Path","Category","Limit"],
+            spendingLimits.map(r => [r.groupPath || "", r.category || "", r.limit || ""])
+          );
+
+          addSheet("11. UNSPSC Restrict or Block GB",
+            ["Group Path","UNSPSC Code","Action"],
+            unspsc.map(r => [r.groupPath || "", r.unspscCode || "", r.action || ""])
+          );
+
+          addSheet("15. Restrict products by keywor",
+            ["Group Path","Keyword"],
+            keywords.map(r => [r.groupPath || "", r.keyword || ""])
+          );
+        }
+
+        else if (catId === 4) {
+          // ---- Category 4: Invoicing (group-level) ----
+          const invoiceRows = data.invoiceRows || [];
+          const tabName = mp === "US" ? "7. Invoice Template US" : "8. Invoice Template CA";
+          const headers = ["Group Path","Business Name","Invoice Template Name","Street Address","Address Line 2","City","State/Province","ZIP/Postal Code","Country","Invoice Email","Payment Terms"];
+          addSheet(tabName, headers,
+            invoiceRows.map(r => [
+              r.groupPath || "", r.companyName || md.companyName || "", r.templateName || "",
+              r.address || "", r.address2 || "", r.city || "", r.state || "",
+              r.zip || "", r.country || mp, r.email || "", r.paymentTerms || ""
+            ])
+          );
+        }
+
+        else if (catId === 5) {
+          // ---- Category 5: Blanket Purchase Orders ----
+          const bpo = data.bpo || [];
+          const bpoAlloc = data.bpoAllocation || [];
+
+          addSheet("9. BPO",
+            ["Group Path","PO Name","PO Number","Amount","Start Date","End Date","Recurring","Frequency","Rollover"],
+            bpo.map(r => [r.groupPath || "", r.poName || "", r.poNumber || "", r.amount || "", r.startDate || "", r.endDate || "", r.recurring || "No", r.frequency || "", r.rollover || "No"])
+          );
+
+          addSheet("10. BPO Allocation",
+            ["PO Number","User Email","Allocated Amount"],
+            bpoAlloc.map(r => [r.poNumber || "", r.userEmail || "", r.allocatedAmount || ""])
+          );
+        }
+
+        else if (catId === 6) {
+          // ---- Category 6: Preferred Products & Brands ----
+          const highlights = data.highlightList || [];
+          const brands = data.highlightBrands || [];
+
+          addSheet("12. Highlight List",
+            ["ASIN","Group Path"],
+            highlights.map(r => [r.asin || "", r.groupPath || ""])
+          );
+
+          addSheet("13. Highlight Brands",
+            ["Brand Name","Group Path"],
+            brands.map(r => [r.brandName || "", r.groupPath || ""])
+          );
+        }
+
+        else if (catId === 7) {
+          // ---- Category 7: Checkout Defaults ----
+          const defaults = data.checkoutDefaults || [];
+          addSheet("16. Checkout Default",
+            ["Group Path","Setting Name","Setting Value"],
+            defaults.map(r => [r.groupPath || "", r.settingName || "", r.settingValue || ""])
+          );
+        }
+
+        else if (catId === 8) {
+          // ---- Category 8: Business Giving ----
+          const givingGroup = data.givingGroup || [];
+          const givingIndiv = data.givingIndividual || [];
+
+          addSheet("17. Business Giving",
+            ["Campaign Name","Amount","Group Path","Message"],
+            givingGroup.map(r => [r.campaignName || "", r.amount || "", r.groupPath || "", r.message || ""])
+          );
+
+          addSheet("17b. Business Giving Individual",
+            ["Campaign Name","Amount","Recipient Email","Message"],
+            givingIndiv.map(r => [r.campaignName || "", r.amount || "", r.recipientEmail || "", r.message || ""])
+          );
+        }
+
+        else if (catId === 9) {
+          // ---- Category 9: Tax Exemption ----
+          const exemptions = data.taxExemptions || [];
+          addSheet("14. Tax Exemption",
+            ["Certificate Name","Group Path","Exemption Type"],
+            exemptions.map(r => [r.certificateName || "", r.groupPath || "", r.exemptionType || ""])
+          );
+        }
+      });
+
+      // ---- Summary Sheet ----
+      const summaryData = [
+        ["Amazon Business Configuration Summary"],
+        [],
+        ["Company Name", md.companyName || ""],
+        ["Marketplace", md.marketplace || ""],
+        ["Root Group Path", md.rootGroupPath || ""],
+        ["Groups", (md.groups || []).map(g => g.fullPath).join(", ")],
+        [],
+        ["Generated", new Date().toISOString()],
+        [],
+        ["Category", "Status", "Row Count"],
+      ];
+      cats.sort((a, b) => a - b).forEach(catId => {
+        const data = stepData["cat-" + catId] || {};
+        const rc = ReviewStep._getRowCount(catId, data);
+        summaryData.push([CAT_NAMES[catId], rc > 0 ? "Complete" : "Incomplete", rc]);
+      });
+      const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+      summaryWs["!cols"] = [{ wch: 30 }, { wch: 20 }, { wch: 15 }];
+      XLSX.utils.book_append_sheet(wb, summaryWs, "Summary");
+
+      // ---- Trigger Download ----
+      const safeName = (md.companyName || "Config").replace(/[^a-zA-Z0-9_\- ]/g, "").trim() || "Config";
+      const ts = new Date().toISOString().replace(/[:.]/g, "-").substring(0, 19);
+      const filename = safeName + "_" + ts + ".xlsx";
+      XLSX.writeFile(wb, filename);
+    }
+  };
+
+
+  /* ==========================================================
+     TASK 16.1 — Export/Import Progress
+     ========================================================== */
+
+  const ProgressIO = {
+    exportProgress() {
+      // Save current step data first
+      const current = StepManager.getCurrentStep();
+      if (current && current.getData) {
+        StateStore.state.stepData[current.id] = current.getData();
+      }
+      const json = JSON.stringify(StateStore.state, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const name = (StateStore.state.masterData.companyName || "wizard").replace(/[^a-zA-Z0-9_\- ]/g, "");
+      a.download = name + "_progress.json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    },
+
+    importProgress() {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".json";
+      input.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const parsed = JSON.parse(ev.target.result);
+            if (!parsed.version || typeof parsed.version !== "number") {
+              alert("Error: Incompatible or invalid progress file. The current session has not been changed.");
+              return;
+            }
+            StateStore.state = parsed;
+            StateStore.saveState();
+            // Rebuild steps
+            const cats = parsed.selectedCategories || [];
+            if (cats.length > 0) {
+              StepManager.buildSteps(cats);
+              const targetId = parsed.lastStep || "welcome";
+              const idx = StepManager.steps.findIndex(s => s.id === targetId);
+              if (idx >= 0) StepManager.currentIndex = idx;
+            } else {
+              StepManager.steps = [WelcomeStep, ReviewStep];
+              StepManager.currentIndex = 0;
+            }
+            StepManager.renderCurrentStep();
+            StepManager.updateProgressBar();
+            StepManager.updateButtons();
+            alert("Progress imported successfully!");
+          } catch (ex) {
+            alert("Error: Malformed JSON file. The current session has not been changed.");
+          }
+        };
+        reader.readAsText(file);
+      });
+      input.click();
+    }
+  };
+
+
+  /* ==========================================================
+     TASK 2.3 — Resume Prompt + Initialization
+     ========================================================== */
+
+  function handleResumeChoice(resume) {
+    document.getElementById("resumeModal").classList.add("hidden");
+    if (resume) {
+      const saved = StateStore.loadState();
+      if (saved) {
+        StateStore.state = saved;
+        const cats = saved.selectedCategories || [];
+        if (cats.length > 0) {
+          StepManager.buildSteps(cats);
+          const targetId = saved.lastStep || "welcome";
+          const idx = StepManager.steps.findIndex(s => s.id === targetId);
+          if (idx >= 0) StepManager.currentIndex = idx;
+        } else {
+          StepManager.steps = [WelcomeStep, ReviewStep];
+          StepManager.currentIndex = 0;
+        }
+      }
+    } else {
+      StateStore.clearState();
+      StepManager.steps = [WelcomeStep, ReviewStep];
+      StepManager.currentIndex = 0;
+    }
+    StepManager.renderCurrentStep();
+    StepManager.updateProgressBar();
+    StepManager.updateButtons();
+  }
+
+  /* ==========================================================
+     Session Code System
+     ========================================================== */
+
+  const SessionManager = {
+    sessionId: null,
+
+    init() {
+      // Check URL for ?session=xxx parameter
+      const params = new URLSearchParams(window.location.search);
+      this.sessionId = params.get("session") || null;
+    },
+
+    getStorageKey() {
+      return this.sessionId
+        ? "configWizard_" + this.sessionId
+        : "configWizardState";
+    },
+
+    hasSession() {
+      return !!this.sessionId;
+    },
+
+    getSessionLabel() {
+      if (!this.sessionId) return "";
+      // Convert session-id to display name: "acme-corp-2025" → "Acme Corp 2025"
+      return this.sessionId.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    }
+  };
+
+
+  // ── Patch StateStore to use session-based keys ──
+
+  StateStore.saveState = function() {
+    try {
+      localStorage.setItem(SessionManager.getStorageKey(), JSON.stringify(this.state));
+    } catch (e) {
+      if (e.name === "QuotaExceededError" || e.code === 22) {
+        console.warn("StateStore: localStorage quota exceeded.");
+      } else {
+        console.warn("StateStore: Unable to save.", e);
+      }
+    }
+  };
+
+  StateStore.loadState = function() {
+    try {
+      const raw = localStorage.getItem(SessionManager.getStorageKey());
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) {
+      console.warn("StateStore: Unable to read.", e);
+      return null;
+    }
+  };
+
+  StateStore.clearState = function() {
+    try {
+      localStorage.removeItem(SessionManager.getStorageKey());
+    } catch (e) {
+      console.warn("StateStore: Unable to clear.", e);
+    }
+    this.state = this.createFreshState();
+  };
+
+
+  // — Boot —
+  function showSessionCreator() {
+    const container = document.getElementById("stepContent");
+    container.innerHTML = `
+      <h2>🚀 Amazon Business Configuration Wizard</h2>
+      <p class="step-description">Welcome! Create a new session for your customer, or enter an existing session code to resume.</p>
+
+      <div style="background:#F0F7FF;border:1px solid #D0E3F7;border-radius:8px;padding:24px;margin-bottom:24px;">
+        <h3 style="margin-bottom:12px;font-size:16px;">Create New Customer Session</h3>
+        <div class="form-group" style="margin-bottom:12px;">
+          <label>Customer / Company Name <span class="required">*</span></label>
+          <input type="text" id="inp-sessionName" placeholder="e.g. Acme Corp" style="width:100%;padding:10px 12px;border:1px solid #CCC;border-radius:4px;font-size:14px;min-height:44px;">
+        </div>
+        <div id="generatedLink" style="display:none;margin-bottom:12px;">
+          <label style="font-weight:600;font-size:13px;display:block;margin-bottom:4px;">📋 Share this link with your customer:</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="inp-sessionLink" readonly style="flex:1;padding:10px 12px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:44px;background:#F9F9F9;font-family:monospace;">
+            <button class="btn btn-sm btn-secondary" onclick="navigator.clipboard.writeText(document.getElementById('inp-sessionLink').value).then(()=>{this.textContent='✓ Copied!';setTimeout(()=>{this.textContent='Copy'},2000)})">Copy</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;">
+          <button class="btn btn-primary" id="btnCreateSession" onclick="createNewSession()">Generate Session Link</button>
+          <button class="btn btn-primary" id="btnStartSession" onclick="startSession()" style="display:none;">Start Wizard →</button>
+        </div>
+      </div>
+
+      <div style="background:#FAFAFA;border:1px solid #E0E0E0;border-radius:8px;padding:24px;">
+        <h3 style="margin-bottom:12px;font-size:16px;">Resume Existing Session</h3>
+        <p style="font-size:13px;color:#666;margin-bottom:12px;">Enter a session code to resume a customer's configuration.</p>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="inp-resumeCode" placeholder="e.g. acme-corp-2025" style="flex:1;padding:10px 12px;border:1px solid #CCC;border-radius:4px;font-size:14px;min-height:44px;">
+          <button class="btn btn-secondary" onclick="resumeExistingSession()">Resume →</button>
+        </div>
+      </div>
+
+      <div style="margin-top:24px;padding:16px;background:#FFF9E6;border:1px solid #F0E0A0;border-radius:6px;font-size:13px;color:#666;">
+        <strong>How it works:</strong><br>
+        1. Enter the customer name → a unique session link is generated<br>
+        2. Share the link with your customer (email, Slack, Highspot)<br>
+        3. Customer opens the link and fills out the wizard at their own pace<br>
+        4. Progress auto-saves — they can close and come back anytime using the same link<br>
+        5. When done, they click "Generate .xlsx File" to download the config file
+      </div>
+    `;
+    // Hide nav buttons on this screen
+    document.getElementById("btnBack").style.display = "none";
+    document.getElementById("btnNext").style.display = "none";
+    document.getElementById("progressBar").style.display = "none";
+  }
+
+  function createNewSession() {
+    const name = document.getElementById("inp-sessionName").value.trim();
+    if (!name) {
+      document.getElementById("inp-sessionName").style.borderColor = "#D13212";
+      return;
+    }
+    // Generate session code: lowercase, replace spaces with dashes, add random suffix
+    const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const suffix = Math.random().toString(36).substring(2, 6);
+    const sessionCode = base + "-" + suffix;
+
+    // Build the link
+    const currentUrl = window.location.href.split("?")[0];
+    const link = currentUrl + "?session=" + sessionCode;
+
+    document.getElementById("inp-sessionLink").value = link;
+    document.getElementById("generatedLink").style.display = "block";
+    document.getElementById("btnCreateSession").style.display = "none";
+    document.getElementById("btnStartSession").style.display = "inline-flex";
+    document.getElementById("btnStartSession").dataset.session = sessionCode;
+  }
+
+  function startSession() {
+    const code = document.getElementById("btnStartSession").dataset.session;
+    window.location.href = window.location.href.split("?")[0] + "?session=" + code;
+  }
+
+  function resumeExistingSession() {
+    const code = document.getElementById("inp-resumeCode").value.trim();
+    if (!code) {
+      document.getElementById("inp-resumeCode").style.borderColor = "#D13212";
+      return;
+    }
+    const clean = code.toLowerCase().replace(/[^a-z0-9-]/g, "");
+    window.location.href = window.location.href.split("?")[0] + "?session=" + clean;
+  }
+
+  // — Boot —
+  (function init() {
+    SessionManager.init();
+    StateStore.init();
+
+    // If no session code in URL, show the session creator screen
+    if (!SessionManager.hasSession()) {
+      showSessionCreator();
+      document.addEventListener("input", (e) => {
+        if (e.target && e.target.id === "inp-sessionName") {
+          e.target.style.borderColor = "#CCC";
+        }
+      });
+      return;
+    }
+
+    // Show session banner
+    const banner = document.createElement("div");
+    banner.style.cssText = "background:#E8F5E9;border-bottom:1px solid #C8E6C9;padding:8px 24px;font-size:13px;color:#2E7D32;display:flex;align-items:center;justify-content:space-between;";
+    banner.innerHTML = `
+      <span>🔗 Session: <strong>${SessionManager.getSessionLabel()}</strong> — Your progress auto-saves to this browser.</span>
+      <span style="color:#999;font-size:12px;">ID: ${SessionManager.sessionId}</span>
+    `;
+    document.querySelector(".wizard-header").after(banner);
+
+    if (!StateStore.isLocalStorageAvailable()) {
+      console.warn("localStorage is unavailable. Auto-save is disabled.");
+    }
+
+    const saved = StateStore.loadState();
+    if (saved && saved.version) {
+      document.getElementById("resumeModal").classList.remove("hidden");
+    } else {
+      StepManager.steps = [WelcomeStep, ReviewStep];
+      StepManager.currentIndex = 0;
+      StepManager.renderCurrentStep();
+      StepManager.updateProgressBar();
+      StepManager.updateButtons();
+    }
+
+    document.addEventListener("input", (e) => {
+      if (e.target && e.target.id === "inp-rootGroupPath") {
+        WelcomeStep._updateAllPaths();
+      }
+    });
+  })();
+  </script>
+
+</body>
+</html>
