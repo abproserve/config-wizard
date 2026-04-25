@@ -3242,10 +3242,11 @@
           const custContact = [drData.adminName, drData.adminEmail, drData.adminPhone].filter(Boolean).join("\n");
 
           // Main data row with first messages
+          const hasLogo = !!drData.logoDataUrl;
           const dataRow = [
             "",
             drData.orgName || "",
-            "", // Logo placeholder
+            hasLogo ? "See attached logo file: " + safeName + "_Logo" : "(No logo uploaded)",
             drData.roomType || "Buyer Resource Hub",
             drData.ingressPoint || "",
             drData.buyerMsg1 || "",
@@ -3305,6 +3306,21 @@
 
           const drFilename = safeName + "_DigitalRoom_" + ts + ".xlsx";
           setTimeout(function() { XLSX.writeFile(drWb, drFilename); }, 800);
+
+          // Download logo as separate image file if uploaded
+          if (drData.logoDataUrl) {
+            setTimeout(function() {
+              var logoLink = document.createElement("a");
+              logoLink.href = drData.logoDataUrl;
+              // Extract file extension from data URL
+              var mimeMatch = drData.logoDataUrl.match(/data:image\/(\w+)/);
+              var ext = mimeMatch ? mimeMatch[1].replace("jpeg", "jpg") : "png";
+              logoLink.download = safeName + "_Logo." + ext;
+              document.body.appendChild(logoLink);
+              logoLink.click();
+              document.body.removeChild(logoLink);
+            }, 1600);
+          }
         }
       }
     }
