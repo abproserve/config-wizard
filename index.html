@@ -663,10 +663,20 @@
       container.innerHTML = "";
       const step = this.getCurrentStep();
       if (step) {
-        step.render(container);
-        // Restore data if available
-        if (step.setData && StateStore.state.stepData[step.id]) {
-          step.setData(StateStore.state.stepData[step.id]);
+        try {
+          step.render(container);
+          // Restore data if available
+          if (step.setData && StateStore.state.stepData[step.id]) {
+            step.setData(StateStore.state.stepData[step.id]);
+          }
+        } catch (err) {
+          console.error("Step render error (" + step.id + "):", err);
+          container.innerHTML = `
+            <h2 style="color:#D13212;">⚠ Step failed to load</h2>
+            <p style="color:#555;margin:12px 0;">An error occurred rendering the <strong>${step.label}</strong> step.</p>
+            <pre style="background:#FFF3F0;border:1px solid #F5C6CB;border-radius:6px;padding:14px;font-size:13px;overflow-x:auto;white-space:pre-wrap;">${err.message}\n${err.stack || ""}</pre>
+            <p style="color:#666;font-size:13px;margin-top:12px;">Try clicking <strong>← Back</strong> and then <strong>Next →</strong> again, or use <strong>📂 Import</strong> to reload your progress file.</p>
+          `;
         }
       }
     },
@@ -753,9 +763,27 @@
         <hr style="margin: 24px 0; border: none; border-top: 1px solid #EEE;">
 
         <h3 style="margin-bottom: 8px;">Group Structure</h3>
-        <p style="color: #666; font-size: 13px; margin-bottom: 12px;">Define sub-groups under your root group. Full paths are computed automatically.</p>
+        <p style="color: #666; font-size: 13px; margin-bottom: 12px;">Define sub-groups under your root group. Full paths are computed automatically. Use any method below to add groups.</p>
+
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+          <button class="btn btn-sm btn-secondary" onclick="WelcomeStep.addGroupRow()" style="font-size:12px;">+ Add One Group</button>
+          <button class="btn btn-sm btn-secondary" id="btnBulkTextToggle" onclick="WelcomeStep.toggleBulkText()" style="font-size:12px;">📝 Bulk Text Entry</button>
+          <button class="btn btn-sm btn-secondary" onclick="WelcomeStep.triggerGroupFileUpload()" style="font-size:12px;">📁 Upload from File</button>
+          <input type="file" id="groupFileInput" accept=".csv,.xlsx,.xls,.txt" style="display:none;">
+        </div>
+
+        <div id="bulkTextArea" style="display:none;margin-bottom:12px;">
+          <div style="background:#F0F7FF;border:1px solid #D0E3F7;border-radius:6px;padding:14px;">
+            <label style="font-weight:600;font-size:13px;display:block;margin-bottom:4px;">Paste or type group names (one per line, or separated by commas):</label>
+            <textarea id="inp-bulkGroups" rows="6" placeholder="Finance&#10;IT&#10;Operations&#10;Marketing&#10;HR" style="width:100%;padding:10px 12px;border:1px solid #CCC;border-radius:4px;font-size:14px;font-family:inherit;resize:vertical;"></textarea>
+            <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+              <button class="btn btn-sm btn-primary" onclick="WelcomeStep.importBulkText()">Add Groups</button>
+              <span style="font-size:12px;color:#666;">Tip: paste from a spreadsheet column, or type names separated by commas or new lines</span>
+            </div>
+          </div>
+        </div>
+
         <div id="groupRows" class="group-rows"></div>
-        <button class="btn btn-sm btn-secondary" onclick="WelcomeStep.addGroupRow()" style="margin-top: 4px;">+ Add Group</button>
 
         <hr style="margin: 24px 0; border: none; border-top: 1px solid #EEE;">
 
@@ -812,6 +840,100 @@
       const inp = row.querySelector(".group-name-input");
       inp.addEventListener("input", () => this._updateAllPaths());
       this._updateAllPaths();
+    },
+
+    toggleBulkText() {
+      const area = document.getElementById("bulkTextArea");
+      area.style.display = area.style.display === "none" ? "block" : "none";
+    },
+
+    importBulkText() {
+      const text = (document.getElementById("inp-bulkGroups") || {}).value || "";
+      // Split by newlines, commas, or semicolons
+      const names = text.split(/[\n,;]+/).map(s => s.trim()).filter(s => s.length > 0);
+      if (names.length === 0) return;
+      // Deduplicate against existing groups
+      const existing = new Set();
+      document.querySelectorAll(".group-name-input").forEach(inp => {
+        if (inp.value.trim()) existing.add(inp.value.trim().toLowerCase());
+      });
+      let added = 0;
+      names.forEach(name => {
+        if (!existing.has(name.toLowerCase())) {
+          this.addGroupRow(name);
+          existing.add(name.toLowerCase());
+          added++;
+        }
+      });
+      // Clear the textarea and show count
+      document.getElementById("inp-bulkGroups").value = "";
+      document.getElementById("bulkTextArea").style.display = "none";
+      if (added > 0) {
+        alert(added + " group(s) added successfully!");
+      } else {
+        alert("No new groups to add (all names already exist).");
+      }
+    },
+
+    triggerGroupFileUpload() {
+      const fi = document.getElementById("groupFileInput");
+      // Wire the change event (re-wire each time to handle re-uploads)
+      fi.onchange = (e) => {
+        if (!e.target.files.length) return;
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            let names = [];
+            const ext = file.name.split(".").pop().toLowerCase();
+            if (ext === "txt") {
+              // Plain text: split by newlines/commas
+              names = ev.target.result.split(/[\n,;]+/).map(s => s.trim()).filter(s => s.length > 0);
+            } else {
+              // CSV/Excel: parse with SheetJS, take first column
+              const data = new Uint8Array(ev.target.result);
+              const wb = XLSX.read(data, { type: "array" });
+              const ws = wb.Sheets[wb.SheetNames[0]];
+              const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+              // Skip header row if it looks like a header
+              const startRow = (json.length > 1 && typeof json[0][0] === "string" &&
+                json[0][0].toLowerCase().includes("group")) ? 1 : 0;
+              for (let r = startRow; r < json.length; r++) {
+                const val = String(json[r][0] || "").trim();
+                if (val) names.push(val);
+              }
+            }
+            if (names.length === 0) {
+              alert("No group names found in the file.");
+              return;
+            }
+            // Deduplicate
+            const existing = new Set();
+            document.querySelectorAll(".group-name-input").forEach(inp => {
+              if (inp.value.trim()) existing.add(inp.value.trim().toLowerCase());
+            });
+            let added = 0;
+            names.forEach(name => {
+              if (!existing.has(name.toLowerCase())) {
+                this.addGroupRow(name);
+                existing.add(name.toLowerCase());
+                added++;
+              }
+            });
+            alert(added + " group(s) imported from " + file.name + "!");
+          } catch (ex) {
+            alert("Unable to read the file. Please use a .csv, .xlsx, .xls, or .txt file with group names.");
+          }
+        };
+        if (file.name.endsWith(".txt")) {
+          reader.readAsText(file);
+        } else {
+          reader.readAsArrayBuffer(file);
+        }
+        // Reset input so same file can be re-uploaded
+        fi.value = "";
+      };
+      fi.click();
     },
 
     _updateAllPaths() {
@@ -1410,9 +1532,20 @@
       const md = StateStore.state.masterData || {};
       const groups = md.groups || [];
       const root = md.rootGroupPath || "";
+      const savedData = StateStore.state.stepData && StateStore.state.stepData["cat-0"];
+      const aaChecked = savedData && savedData.accountAuthority ? "checked" : "";
       container.innerHTML = `
         <h2>${CAT_ICONS[0]} ${CAT_NAMES[0]}</h2>
         <p class="step-description">Upload your employee directory to bulk-import users into your Amazon Business account. Each user needs an email, name, and role. You can then assign users to groups.</p>
+        <div style="background:#FFF8F0;border:1px solid #E4A869;border-radius:6px;padding:14px;margin-bottom:20px;">
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
+            <input type="checkbox" id="accountAuthorityChk" ${aaChecked} style="margin-top:3px;width:18px;height:18px;flex-shrink:0;">
+            <div>
+              <strong style="color:#232F3E;">Account Authority</strong>
+              <p style="margin:4px 0 0;font-size:13px;color:#555;">Account Authority is an Amazon Business feature that allows business customers to establish ownership of their business account by claiming their company's business domain, and then set up administrative policies to gain increased control and visibility, reduce rogue spend, and enforce best practices over their procurement process on Amazon Business.</p>
+            </div>
+          </label>
+        </div>
         <div style="background:#F0F7FF;border:1px solid #D0E3F7;border-radius:6px;padding:14px;margin-bottom:20px;">
           <strong>Group Structure (from Welcome step):</strong>
           <ul style="margin:8px 0 0 20px;font-size:13px;color:#555;">
@@ -1448,9 +1581,11 @@
     },
 
     getData() {
+      const aaChk = document.getElementById("accountAuthorityChk");
       return {
         uploader: this._uploader ? this._uploader.getState() : null,
         groupAssigner: this._groupAssigner ? this._groupAssigner.getState() : null,
+        accountAuthority: aaChk ? aaChk.checked : false,
       };
     },
 
@@ -2095,48 +2230,56 @@
           ${addrPickerHtml}
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div class="form-group" style="margin-bottom:8px;">
-              <label style="font-size:13px;">Business Name</label>
+              <label style="font-size:13px;">Business Name <span class="required">*</span></label>
               <input type="text" id="${formId}-companyName" value="${existing.companyName || companyName}" style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
+              <div class="error-msg">Business Name is required</div>
             </div>
             <div class="form-group" style="margin-bottom:8px;">
-              <label style="font-size:13px;">Invoice Template Name</label>
-              <input type="text" id="${formId}-templateName" value="${existing.templateName || groupPath + " Invoice"}" placeholder="Optional" style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
+              <label style="font-size:13px;">Invoice Template Name <span class="required">*</span></label>
+              <input type="text" id="${formId}-templateName" value="${existing.templateName || groupPath + " Invoice"}" placeholder="e.g. Finance Invoice" style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
+              <div class="error-msg">Invoice Template Name is required</div>
             </div>
             <div class="form-group" style="margin-bottom:8px;">
               <label style="font-size:13px;">Street Address <span class="required">*</span></label>
               <input type="text" id="${formId}-address" value="${existing.address || ""}" placeholder="123 Main St" style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
-              <div class="error-msg">Address is required</div>
+              <div class="error-msg">Street Address is required</div>
             </div>
             <div class="form-group" style="margin-bottom:8px;">
-              <label style="font-size:13px;">Address Line 2</label>
+              <label style="font-size:13px;">Address Line 2 <span class="required">*</span></label>
               <input type="text" id="${formId}-address2" value="${existing.address2 || ""}" placeholder="Suite, Floor, etc." style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
+              <div class="error-msg">Address Line 2 is required</div>
             </div>
             <div class="form-group" style="margin-bottom:8px;">
-              <label style="font-size:13px;">City</label>
+              <label style="font-size:13px;">City <span class="required">*</span></label>
               <input type="text" id="${formId}-city" value="${existing.city || ""}" placeholder="City" style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
+              <div class="error-msg">City is required</div>
             </div>
             <div class="form-group" style="margin-bottom:8px;">
-              <label style="font-size:13px;">State/Province</label>
+              <label style="font-size:13px;">State/Province <span class="required">*</span></label>
               <input type="text" id="${formId}-state" value="${existing.state || ""}" placeholder="State" style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
+              <div class="error-msg">State/Province is required</div>
             </div>
             <div class="form-group" style="margin-bottom:8px;">
-              <label style="font-size:13px;">ZIP/Postal Code</label>
+              <label style="font-size:13px;">ZIP/Postal Code <span class="required">*</span></label>
               <input type="text" id="${formId}-zip" value="${existing.zip || ""}" placeholder="ZIP" style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
+              <div class="error-msg">ZIP/Postal Code is required</div>
             </div>
             <div class="form-group" style="margin-bottom:8px;">
-              <label style="font-size:13px;">Country</label>
+              <label style="font-size:13px;">Country <span class="required">*</span></label>
               <select id="${formId}-country" style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
                 <option value="US" ${(existing.country || mp) === "US" ? "selected" : ""}>US</option>
                 <option value="CA" ${(existing.country || mp) === "CA" ? "selected" : ""}>CA</option>
               </select>
             </div>
             <div class="form-group" style="margin-bottom:8px;">
-              <label style="font-size:13px;">Invoice Email</label>
+              <label style="font-size:13px;">Invoice Email <span class="required">*</span></label>
               <input type="email" id="${formId}-email" value="${existing.email || ""}" placeholder="invoices@company.com" style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
+              <div class="error-msg">Invoice Email is required</div>
             </div>
             <div class="form-group" style="margin-bottom:8px;">
-              <label style="font-size:13px;">Payment Terms</label>
+              <label style="font-size:13px;">Payment Terms <span class="required">*</span></label>
               <input type="text" id="${formId}-paymentTerms" value="${existing.paymentTerms || ""}" placeholder="e.g. Net 30" style="width:100%;padding:8px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;min-height:38px;">
+              <div class="error-msg">Payment Terms is required</div>
             </div>
           </div>
         `;
@@ -2186,14 +2329,27 @@
       if (checked.length === 0) {
         errors.push("Please select at least one group for invoice templates");
       }
-      // Check each form has an address
+      const requiredFields = [
+        {key:"companyName",label:"Business Name"},
+        {key:"templateName",label:"Invoice Template Name"},
+        {key:"address",label:"Street Address"},
+        {key:"address2",label:"Address Line 2"},
+        {key:"city",label:"City"},
+        {key:"state",label:"State/Province"},
+        {key:"zip",label:"ZIP/Postal Code"},
+        {key:"email",label:"Invoice Email"},
+        {key:"paymentTerms",label:"Payment Terms"}
+      ];
       checked.forEach((_, idx) => {
-        const addr = document.getElementById("inv-form-" + idx + "-address");
-        if (addr && !addr.value.trim()) {
-          const fg = addr.closest(".form-group");
-          if (fg) fg.classList.add("has-error");
-          errors.push("Address is required for each invoice template");
-        }
+        const formId = "inv-form-" + idx;
+        requiredFields.forEach(f => {
+          const el = document.getElementById(formId + "-" + f.key);
+          if (el && !el.value.trim()) {
+            const fg = el.closest(".form-group");
+            if (fg) fg.classList.add("has-error");
+            errors.push(f.label + " is required for each invoice template");
+          }
+        });
       });
       return { valid: errors.length === 0, errors };
     },
@@ -2587,16 +2743,19 @@
             }
           });
 
-          addSheet("2.User Upload List (without AA)",
-            ["Email Address", "First Name", "Last Name", "Role", "Group Path"],
-            userRows
-          );
+          const aa = !!data.accountAuthority;
 
-          // 3. User Upload List (with AA)
-          addSheet("3. User Upload List (with AA)",
-            ["Email Address", "First Name", "Last Name", "Role", "Group Path"],
-            []
-          );
+          if (aa) {
+            addSheet("3. User Upload List (with AA)",
+              ["Email Address", "First Name", "Last Name", "Role", "Group Path"],
+              userRows
+            );
+          } else {
+            addSheet("2.User Upload List (without AA)",
+              ["Email Address", "First Name", "Last Name", "Role", "Group Path"],
+              userRows
+            );
+          }
         }
 
         else if (catId === 1) {
@@ -2883,17 +3042,29 @@
           StepManager.buildSteps(cats);
           const targetId = saved.lastStep || "welcome";
           const idx = StepManager.steps.findIndex(s => s.id === targetId);
-          if (idx >= 0) StepManager.currentIndex = idx;
+          StepManager.currentIndex = idx >= 0 ? idx : 0;
         } else {
           StepManager.steps = [WelcomeStep, ReviewStep];
           StepManager.currentIndex = 0;
         }
+      } else {
+        // No saved state found despite showing resume modal — start fresh
+        StepManager.steps = [WelcomeStep, ReviewStep];
+        StepManager.currentIndex = 0;
       }
     } else {
       StateStore.clearState();
       StepManager.steps = [WelcomeStep, ReviewStep];
       StepManager.currentIndex = 0;
     }
+
+    // Safety: ensure we have a valid current step
+    if (!StepManager.getCurrentStep()) {
+      console.warn("No valid step found, resetting to Welcome");
+      StepManager.steps = [WelcomeStep, ReviewStep];
+      StepManager.currentIndex = 0;
+    }
+
     StepManager.renderCurrentStep();
     StepManager.updateProgressBar();
     StepManager.updateButtons();
@@ -3039,7 +3210,50 @@
 
   function startSession() {
     const code = document.getElementById("btnStartSession").dataset.session;
-    window.location.href = window.location.href.split("?")[0] + "?session=" + code;
+    if (!code) return;
+
+    // Try navigating to the session URL
+    const baseUrl = window.location.href.split("?")[0].split("#")[0];
+    const targetUrl = baseUrl + "?session=" + code;
+
+    // If navigation doesn't work (e.g. file:// quirks), initialize in-place
+    try {
+      // Set session directly and re-initialize without page reload as fallback
+      SessionManager.sessionId = code;
+
+      // Show session banner
+      const existingBanner = document.querySelector(".session-banner");
+      if (existingBanner) existingBanner.remove();
+      const banner = document.createElement("div");
+      banner.className = "session-banner";
+      banner.style.cssText = "background:#E8F5E9;border-bottom:1px solid #C8E6C9;padding:8px 24px;font-size:13px;color:#2E7D32;display:flex;align-items:center;justify-content:space-between;";
+      banner.innerHTML = `
+        <span>🔗 Session: <strong>${SessionManager.getSessionLabel()}</strong> — Your progress auto-saves to this browser.</span>
+        <span style="color:#999;font-size:12px;">ID: ${code}</span>
+      `;
+      document.querySelector(".wizard-header").after(banner);
+
+      // Restore nav buttons
+      document.getElementById("btnBack").style.display = "";
+      document.getElementById("btnNext").style.display = "";
+      document.getElementById("progressBar").style.display = "";
+
+      // Initialize fresh wizard
+      StateStore.init();
+      StepManager.steps = [WelcomeStep, ReviewStep];
+      StepManager.currentIndex = 0;
+      StepManager.renderCurrentStep();
+      StepManager.updateProgressBar();
+      StepManager.updateButtons();
+
+      // Also try updating the URL bar without reload
+      try {
+        window.history.replaceState({}, "", targetUrl);
+      } catch (e) { /* file:// may not support pushState */ }
+    } catch (e) {
+      // Last resort: hard navigate
+      window.location.href = targetUrl;
+    }
   }
 
   function resumeExistingSession() {
@@ -3049,7 +3263,56 @@
       return;
     }
     const clean = code.toLowerCase().replace(/[^a-z0-9-]/g, "");
-    window.location.href = window.location.href.split("?")[0] + "?session=" + clean;
+
+    // Initialize in-place (same approach as startSession)
+    try {
+      SessionManager.sessionId = clean;
+
+      const existingBanner = document.querySelector(".session-banner");
+      if (existingBanner) existingBanner.remove();
+      const banner = document.createElement("div");
+      banner.className = "session-banner";
+      banner.style.cssText = "background:#E8F5E9;border-bottom:1px solid #C8E6C9;padding:8px 24px;font-size:13px;color:#2E7D32;display:flex;align-items:center;justify-content:space-between;";
+      banner.innerHTML = `
+        <span>🔗 Session: <strong>${SessionManager.getSessionLabel()}</strong> — Your progress auto-saves to this browser.</span>
+        <span style="color:#999;font-size:12px;">ID: ${clean}</span>
+      `;
+      document.querySelector(".wizard-header").after(banner);
+
+      document.getElementById("btnBack").style.display = "";
+      document.getElementById("btnNext").style.display = "";
+      document.getElementById("progressBar").style.display = "";
+
+      StateStore.init();
+      const saved = StateStore.loadState();
+      if (saved && saved.version) {
+        StateStore.state = saved;
+        const cats = saved.selectedCategories || [];
+        if (cats.length > 0) {
+          StepManager.buildSteps(cats);
+          const targetId = saved.lastStep || "welcome";
+          const idx = StepManager.steps.findIndex(s => s.id === targetId);
+          StepManager.currentIndex = idx >= 0 ? idx : 0;
+        } else {
+          StepManager.steps = [WelcomeStep, ReviewStep];
+          StepManager.currentIndex = 0;
+        }
+      } else {
+        StepManager.steps = [WelcomeStep, ReviewStep];
+        StepManager.currentIndex = 0;
+      }
+      StepManager.renderCurrentStep();
+      StepManager.updateProgressBar();
+      StepManager.updateButtons();
+
+      try {
+        const baseUrl = window.location.href.split("?")[0].split("#")[0];
+        window.history.replaceState({}, "", baseUrl + "?session=" + clean);
+      } catch (e) { /* file:// may not support pushState */ }
+    } catch (e) {
+      // Fallback: hard navigate
+      window.location.href = window.location.href.split("?")[0] + "?session=" + clean;
+    }
   }
 
   // — Boot —
