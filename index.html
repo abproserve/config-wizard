@@ -497,11 +497,15 @@
   <footer class="wizard-footer">
     <div style="display:flex;gap:8px;align-items:center;">
       <button class="btn btn-secondary" id="btnBack" onclick="StepManager.goBack()">← Back</button>
-      <button class="btn btn-sm btn-secondary" onclick="ProgressIO.exportProgress()" title="Export Progress" style="font-size:12px;">💾 Export</button>
-      <button class="btn btn-sm btn-secondary" onclick="ProgressIO.importProgress()" title="Import Progress" style="font-size:12px;">📂 Import</button>
+      <button class="btn btn-sm btn-primary" onclick="AutoSave.saveNow()" title="Save Progress" id="btnSave" style="font-size:12px;">💾 Save</button>
+      <button class="btn btn-sm btn-secondary" onclick="ProgressIO.exportProgress()" title="Export to File" style="font-size:12px;">📥 Export</button>
+      <button class="btn btn-sm btn-secondary" onclick="ProgressIO.importProgress()" title="Import from File" style="font-size:12px;">📤 Import</button>
     </div>
     <button class="btn btn-primary" id="btnNext" onclick="StepManager.goNext()">Next →</button>
   </footer>
+
+  <!-- Save Toast -->
+  <div id="saveToast" style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#067D62;color:#FFF;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.2);opacity:0;transition:opacity 0.3s;pointer-events:none;z-index:2000;">✓ Progress saved</div>
 
   <!-- Resume Modal -->
   <div class="modal-overlay hidden" id="resumeModal">
@@ -1051,12 +1055,17 @@
       // Special: if on Welcome, rebuild steps from selected categories
       if (current.id === "welcome") {
         const data = current.getData();
+        // Merge: keep chat-added groups that aren't in the DOM
+        const domGroups = data.groups || [];
+        const existingGroups = StateStore.state.masterData.groups || [];
+        const domPaths = new Set(domGroups.map(g => g.fullPath));
+        const chatOnlyGroups = existingGroups.filter(g => g._addedViaChat && !domPaths.has(g.fullPath));
         StateStore.state.masterData = {
           companyName: data.companyName,
           marketplace: data.marketplace,
           rootGroupPath: data.rootGroupPath,
-          groups: data.groups || [],
-          groupSettings: data.groupSettings || {},
+          groups: [...domGroups, ...chatOnlyGroups],
+          groupSettings: { ...(StateStore.state.masterData.groupSettings || {}), ...(data.groupSettings || {}) },
         };
         StateStore.state.selectedCategories = data.selectedCategories;
         this.buildSteps(data.selectedCategories);
@@ -1119,6 +1128,8 @@
           if (step.setData && StateStore.state.stepData[step.id]) {
             step.setData(StateStore.state.stepData[step.id]);
           }
+          // Attach auto-save listeners to new step content
+          if (typeof AutoSave !== "undefined") AutoSave.attachListeners();
         } catch (err) {
           console.error("Step render error (" + step.id + "):", err);
           container.innerHTML = `
@@ -1257,9 +1268,20 @@
             <button class="btn btn-sm btn-secondary" style="font-size:11px;padding:4px 10px;" onclick="WelcomeStep._showGroupSettingsHelp()">❓ Learn more</button>
           </div>
           <p style="font-size:12px;color:#666;margin-bottom:12px;">Configure Addresses and Payments visibility for each group.</p>
-          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-            <button class="btn btn-sm btn-secondary" style="font-size:12px;" onclick="WelcomeStep._applyAllGroupSettings('addresses')">Apply Addresses to All ▾</button>
-            <button class="btn btn-sm btn-secondary" style="font-size:12px;" onclick="WelcomeStep._applyAllGroupSettings('payments')">Apply Payments to All ▾</button>
+          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+            <label style="font-size:12px;font-weight:600;color:#555;">Apply to all:</label>
+            <select id="gsApplyAddr" onchange="WelcomeStep._applyAllGroupSettings('addresses', this.value)" style="padding:6px 10px;border:1px solid #CCC;border-radius:4px;font-size:12px;min-height:36px;min-width:44px;cursor:pointer;">
+              <option value="">Addresses ▾</option>
+              <option value="Shared">Shared</option>
+              <option value="Individual">Individual</option>
+              <option value="Both">Both</option>
+            </select>
+            <select id="gsApplyPay" onchange="WelcomeStep._applyAllGroupSettings('payments', this.value)" style="padding:6px 10px;border:1px solid #CCC;border-radius:4px;font-size:12px;min-height:36px;min-width:44px;cursor:pointer;">
+              <option value="">Payments ▾</option>
+              <option value="Shared">Shared</option>
+              <option value="Individual">Individual</option>
+              <option value="Both">Both</option>
+            </select>
           </div>
           <div id="groupSettingsRows"></div>
         </div>
@@ -1599,14 +1621,14 @@
       });
     },
 
-    _applyAllGroupSettings(type) {
+    _applyAllGroupSettings(type, value) {
+      if (!value) return;
       const cls = type === "addresses" ? "gs-addr" : "gs-pay";
-      const label = type === "addresses" ? "Addresses" : "Payments";
-      const val = prompt("Apply to all groups — select:\n1 = Shared\n2 = Individual\n3 = Both\n\nEnter 1, 2, or 3:");
-      if (val === "1" || val === "2" || val === "3") {
-        const setting = val === "1" ? "Shared" : val === "2" ? "Individual" : "Both";
-        document.querySelectorAll("." + cls).forEach(sel => sel.value = setting);
-      }
+      document.querySelectorAll("." + cls).forEach(sel => sel.value = value);
+      // Reset the dropdown back to placeholder after applying
+      const dropdownId = type === "addresses" ? "gsApplyAddr" : "gsApplyPay";
+      const dropdown = document.getElementById(dropdownId);
+      if (dropdown) setTimeout(() => { dropdown.value = ""; }, 300);
     },
 
     _showGroupSettingsHelp() {
@@ -5614,6 +5636,78 @@
 
 
   /* ==========================================================
+     AutoSave — saves current step to localStorage on demand,
+     on input changes (debounced), and before page unload
+     ========================================================== */
+  const AutoSave = {
+    _timer: null,
+    _lastSave: 0,
+
+    /* Capture current step data and persist to localStorage */
+    saveNow(showToast = true) {
+      try {
+        const current = StepManager.getCurrentStep();
+        if (current && current.getData) {
+          StateStore.state.stepData[current.id] = current.getData();
+        }
+        // Only rebuild masterData from DOM when actually on the welcome step
+        if (current && current.id === "welcome" && current.getData) {
+          const data = current.getData();
+          if (data.companyName !== undefined) {
+            // Merge: keep chat-added groups that aren't in the DOM
+            const domGroups = data.groups || [];
+            const existingGroups = StateStore.state.masterData.groups || [];
+            const domPaths = new Set(domGroups.map(g => g.fullPath));
+            const chatOnlyGroups = existingGroups.filter(g => g._addedViaChat && !domPaths.has(g.fullPath));
+            StateStore.state.masterData = {
+              companyName: data.companyName,
+              marketplace: data.marketplace,
+              rootGroupPath: data.rootGroupPath,
+              groups: [...domGroups, ...chatOnlyGroups],
+              groupSettings: { ...(StateStore.state.masterData.groupSettings || {}), ...(data.groupSettings || {}) },
+            };
+            StateStore.state.selectedCategories = data.selectedCategories || StateStore.state.selectedCategories;
+          }
+        }
+        StateStore.state.lastStep = (StepManager.getCurrentStep() || {}).id || "welcome";
+        StateStore.saveState();
+        this._lastSave = Date.now();
+        if (showToast) this._showToast();
+      } catch (e) {
+        console.warn("AutoSave: save failed", e);
+      }
+    },
+
+    /* Debounced save — waits 2s after last input change */
+    scheduleSave() {
+      if (this._timer) clearTimeout(this._timer);
+      this._timer = setTimeout(() => this.saveNow(false), 2000);
+    },
+
+    /* Visual confirmation toast */
+    _showToast() {
+      const el = document.getElementById("saveToast");
+      if (!el) return;
+      el.style.opacity = "1";
+      setTimeout(() => { el.style.opacity = "0"; }, 1800);
+    },
+
+    /* Attach input listeners to the step card for auto-save */
+    attachListeners() {
+      const card = document.getElementById("stepContent");
+      if (!card) return;
+      card.addEventListener("input", () => this.scheduleSave());
+      card.addEventListener("change", () => this.scheduleSave());
+    }
+  };
+
+  /* Save before page unload (refresh/close) */
+  window.addEventListener("beforeunload", () => {
+    AutoSave.saveNow(false);
+  });
+
+
+  /* ==========================================================
      TASK 2.3 — Resume Prompt + Initialization
      ========================================================== */
 
@@ -5960,6 +6054,645 @@
   })();
   </script>
 
+<!-- Chat Assistant FAB + Drawer (hidden until Welcome step is completed) -->
+<button class="chat-fab" id="chatFab" onclick="ChatPanel.toggle()" title="Ask a question" style="display:flex;">💬</button>
+<div class="chat-drawer" id="chatDrawer">
+  <div class="chat-drawer-header">
+    <span class="cdh-title">🤖 Configuration Assistant</span>
+    <button class="cdh-close" onclick="ChatPanel.toggle()">✕</button>
+  </div>
+  <div class="chat-drawer-messages" id="chatMessages"></div>
+  <div class="chat-drawer-input">
+    <input type="text" id="chatInput" placeholder="Ask a question or enter a command..."
+      onkeydown="if(event.key==='Enter'){event.preventDefault();ChatPanel.send();}">
+    <button onclick="ChatPanel.send()">Send</button>
+  </div>
+</div>
+
+<style>
+  .chat-fab {
+    position: fixed; bottom: 24px; right: 24px; z-index: 1000;
+    width: 56px; height: 56px; border-radius: 50%; border: none;
+    background: #E47911; color: #FFF; font-size: 24px; cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25); display: none;
+    align-items: center; justify-content: center; transition: transform 0.2s;
+  }
+  .chat-fab:hover { transform: scale(1.1); }
+  .chat-drawer {
+    position: fixed; bottom: 24px; right: 24px; z-index: 1001;
+    width: 420px; height: 560px; max-height: calc(100vh - 48px);
+    background: #FFF; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    display: flex; flex-direction: column; overflow: hidden;
+    transform: scale(0.8) translateY(20px); opacity: 0; pointer-events: none;
+    transition: transform 0.25s ease, opacity 0.25s ease;
+  }
+  .chat-drawer.open { transform: scale(1) translateY(0); opacity: 1; pointer-events: auto; }
+  .chat-drawer-header {
+    background: #232F3E; color: #FFF; padding: 12px 16px;
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  .chat-drawer-header .cdh-title { font-weight: 600; font-size: 14px; }
+  .chat-drawer-header .cdh-close {
+    background: none; border: none; color: #FFF; font-size: 20px; cursor: pointer;
+    width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px;
+  }
+  .chat-drawer-header .cdh-close:hover { background: rgba(255,255,255,0.15); }
+  .chat-drawer-messages { flex: 1; overflow-y: auto; padding: 14px; scroll-behavior: smooth; background: #F9F9F9; }
+  .cd-msg { display: flex; gap: 8px; margin-bottom: 10px; }
+  .cd-msg.bot { align-items: flex-start; }
+  .cd-msg.user { flex-direction: row-reverse; }
+  .cd-avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .cd-msg.bot .cd-avatar { background: #E47911; color: #FFF; }
+  .cd-msg.user .cd-avatar { background: #232F3E; color: #FFF; }
+  .cd-bubble { padding: 10px 14px; border-radius: 10px; font-size: 13px; line-height: 1.5; max-width: 320px; word-wrap: break-word; }
+  .cd-msg.bot .cd-bubble { background: #FFF; border: 1px solid #DDD; border-radius: 2px 10px 10px 10px; }
+  .cd-msg.user .cd-bubble { background: #232F3E; color: #FFF; border-radius: 10px 2px 10px 10px; }
+  .cd-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .cd-qr { background: #FFF; border: 1.5px solid #E47911; color: #E47911; padding: 6px 12px; border-radius: 16px; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+  .cd-qr:hover { background: #E47911; color: #FFF; }
+  .cd-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 4px; }
+  .cd-table th { background: #F0F0F0; border: 1px solid #DDD; padding: 3px 6px; }
+  .cd-table td { border: 1px solid #EEE; padding: 3px 6px; }
+  .chat-drawer-input { padding: 10px 14px; border-top: 1px solid #E8E8E8; display: flex; gap: 8px; flex-shrink: 0; }
+  .chat-drawer-input input { flex: 1; padding: 8px 12px; border: 1px solid #CCC; border-radius: 8px; font-size: 13px; min-height: 38px; font-family: inherit; }
+  .chat-drawer-input input:focus { outline: none; border-color: #E47911; box-shadow: 0 0 0 2px rgba(228,121,17,0.15); }
+  .chat-drawer-input button { background: #E47911; color: #FFF; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; min-height: 38px; }
+  .chat-drawer-input button:hover { background: #C76A0E; }
+  .cd-typing { display: flex; gap: 3px; padding: 6px 0; }
+  .cd-typing span { width: 6px; height: 6px; background: #CCC; border-radius: 50%; animation: cdBounce 1.2s infinite; }
+  .cd-typing span:nth-child(2) { animation-delay: 0.2s; }
+  .cd-typing span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes cdBounce { 0%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-6px); } }
+  @media (max-width: 500px) { .chat-drawer { width: calc(100vw - 16px); right: 8px; bottom: 8px; height: calc(100vh - 16px); } }
+</style>
+
+<script>
+/* ==========================================================
+   Chat Assistant — embedded in the Configuration Wizard
+   Gated: only visible after Welcome step (company name set)
+   Features: Q&A from reference guide + data commands
+   ========================================================== */
+const ChatPanel = {
+  isOpen: false, hasGreeted: false,
+  toggle() {
+    this.isOpen = !this.isOpen;
+    document.getElementById("chatDrawer").classList.toggle("open", this.isOpen);
+    document.getElementById("chatFab").style.display = this.isOpen ? "none" : "flex";
+    if (this.isOpen && !this.hasGreeted) { this.hasGreeted = true; this.greet(); }
+    if (this.isOpen) setTimeout(() => document.getElementById("chatInput").focus(), 200);
+  },
+  greet() {
+    const name = (StateStore.state.masterData || {}).companyName || "";
+    this.botMsg(`Hi! I'm your configuration assistant for <strong>${name || "your account"}</strong>. Ask me anything about Amazon Business features, or use data commands like <strong>add user</strong>, <strong>show groups</strong>, etc.`);
+    this.showQuickReplies(["What should I set up first?", "US vs CA differences", "What is BOI?", "How do approvals work?"]);
+  },
+  botMsg(html) {
+    const el = document.getElementById("chatMessages");
+    const w = document.createElement("div"); w.className = "cd-msg bot";
+    w.innerHTML = `<div class="cd-avatar">🤖</div><div class="cd-bubble">${html}</div>`;
+    el.appendChild(w); el.scrollTop = el.scrollHeight;
+  },
+  userMsg(text) {
+    const el = document.getElementById("chatMessages");
+    const w = document.createElement("div"); w.className = "cd-msg user";
+    w.innerHTML = `<div class="cd-avatar">👤</div><div class="cd-bubble">${text.replace(/</g,"&lt;").replace(/>/g,"&gt;")}</div>`;
+    el.appendChild(w); el.scrollTop = el.scrollHeight;
+  },
+  showQuickReplies(options) {
+    const el = document.getElementById("chatMessages");
+    const w = document.createElement("div"); w.className = "cd-msg bot";
+    const b = document.createElement("div"); b.className = "cd-bubble";
+    const qr = document.createElement("div"); qr.className = "cd-quick";
+    options.forEach(opt => {
+      const btn = document.createElement("button"); btn.className = "cd-qr"; btn.textContent = opt;
+      btn.addEventListener("click", () => {
+        qr.querySelectorAll(".cd-qr").forEach(b => { b.disabled = true; b.style.opacity = "0.4"; });
+        btn.style.opacity = "1"; btn.style.background = "#E47911"; btn.style.color = "#FFF";
+        this.userMsg(opt); this.handleInput(opt);
+      });
+      qr.appendChild(btn);
+    });
+    b.appendChild(qr); w.innerHTML = `<div class="cd-avatar">🤖</div>`; w.appendChild(b);
+    el.appendChild(w); el.scrollTop = el.scrollHeight;
+  },
+  send() {
+    const input = document.getElementById("chatInput"); const text = input.value.trim();
+    if (!text) return; input.value = ""; this.userMsg(text); this.handleInput(text);
+  },
+  handleInput(text) {
+    const lower = text.toLowerCase();
+    const el = document.getElementById("chatMessages");
+    const typing = document.createElement("div"); typing.className = "cd-msg bot"; typing.id = "cdTyping";
+    typing.innerHTML = `<div class="cd-avatar">🤖</div><div class="cd-bubble"><div class="cd-typing"><span></span><span></span><span></span></div></div>`;
+    el.appendChild(typing); el.scrollTop = el.scrollHeight;
+    setTimeout(() => { typing.remove(); this._respond(text, lower); }, 300 + Math.random() * 400);
+  },
+  /* ---- Conversational context extraction ---- */
+  _extractContext(text, lower) {
+    const ctx = {};
+    const bizMatch = lower.match(/(?:i\s+(?:run|own|manage|have|operate|work\s+(?:at|for|in)))\s+(?:a\s+)?(.+?)(?:\s*[,.]|\s+(?:and|with|i\s|we\s|but|how|what|can|should|need|want|do|is|are|my|our|the|it|there|[0-9]))/);
+    if (bizMatch) ctx.businessType = bizMatch[1].replace(/^(?:a|an|the)\s+/i, "").trim();
+    const numMatch = text.match(/(\d+)\s*(?:location|site|office|store|branch|warehouse|employee|user|people|staff|member|team|department|division|unit)/i);
+    if (numMatch) { ctx.scale = parseInt(numMatch[1]); ctx.scaleUnit = text.match(/\d+\s*(\w+)/i)?.[1]?.toLowerCase(); }
+    if (lower.match(/not\s+sure|don'?t\s+know|confused|overwhelm|help\s+me|where\s+do\s+i|how\s+do\s+i|how\s+should|what\s+should|getting\s+started|new\s+to|set\s*up/)) ctx.needsGuidance = true;
+    if (lower.match(/approv|spend|limit|budget|threshold/)) ctx.topic = "approvals";
+    else if (lower.match(/bulk\s*upload|upload\s*template|import\s*template|bulk\s*import/)) ctx.topic = "bulk_upload";
+    else if (lower.match(/group\s*setting|address\s*visibility|payment\s*visibility/)) ctx.topic = "group_settings";
+    else if (lower.match(/address|ship|deliver|location|warehouse|office/)) ctx.topic = "addresses";
+    else if (lower.match(/user|employee|invite|onboard|people|staff|team/)) ctx.topic = "users";
+    else if (lower.match(/group|structure|hierarchy|department|division|org\b/)) ctx.topic = "groups";
+    else if (lower.match(/tax|exempt/)) ctx.topic = "tax";
+    else if (lower.match(/invoice|billing|reconcil/)) ctx.topic = "invoicing";
+    else if (lower.match(/buy|purchas|order|restrict|block|prefer|guided/)) ctx.topic = "buying";
+    else if (lower.match(/pay|card|pbi|credit/)) ctx.topic = "payments";
+    else if (lower.match(/report|analytic|spend\s+vis|dashboard|track/)) ctx.topic = "analytics";
+    else if (lower.match(/sso|punchout|erp|integrat|saml|ariba|coupa/)) ctx.topic = "integrations";
+    return ctx;
+  },
+  /* --- Conversational response handler --- */
+  _respondConversational(text, lower, ctx, md, isCA, root, groups) {
+    const parts = [];
+    const followUp = [];
+    const isLarge = ctx.scale && ctx.scale > 10;
+    const isMedium = ctx.scale && ctx.scale > 3 && ctx.scale <= 10;
+    if (ctx.businessType) {
+      parts.push(`Great — a <strong>${ctx.businessType}</strong> business${ctx.scale ? ` with <strong>${ctx.scale} ${ctx.scaleUnit || "locations"}</strong>` : ""}! Let me help you think through the setup.`);
+    } else if (ctx.scale) {
+      parts.push(`With <strong>${ctx.scale} ${ctx.scaleUnit || "locations"}</strong>, you'll want a well-organized structure. Here's what I'd recommend:`);
+    } else if (ctx.needsGuidance && !ctx.topic) {
+      parts.push(`No worries — I'll walk you through it.`);
+    }
+    const topicAdvice = {
+      "bulk_upload":  { msg:`Each configuration step has a <strong>📥 Download Template</strong> button. Download the spreadsheet, fill in your data (users, addresses, etc.), then click <strong>📤 Upload</strong> to import everything at once.${isLarge?" With "+ctx.scale+" locations, this will save you a lot of time.":""}`, qr:["How do I add users?","How do I add addresses?","Tell me about groups"] },
+      "group_settings":{ msg:`<strong>Group Settings</strong> control how addresses and payments are shared. After adding groups, expand the Group Settings panel. For each group choose:<br>• <strong>Shared</strong> — everyone sees the same addresses/payments<br>• <strong>Individual</strong> — each user manages their own<br>• <strong>Both</strong> — shared options plus personal ones<br><br>Use "Apply to All" buttons to set them in bulk.`, qr:["How do groups work?","How do I add addresses?","What are the roles?"] },
+      "approvals":    { msg:`For approvals, I'd recommend starting with a single threshold${isLarge?" per region":""}. Set dollar limits (e.g., orders over $500 need approval) and assign up to 10 approvers per level.`, qr:["What threshold should I set?","How many approval levels?","Can approvers delegate?"] },
+      "addresses":    { msg:`For addresses, ${isLarge?"you'll want one per location. With "+ctx.scale+" sites, use the bulk upload template — much faster.":"add each delivery location with a full address and phone number. Assign each to a group."}`, qr:["How do I bulk upload?","Can groups share addresses?","Tell me about delivery hours"] },
+      "users":        { msg:`To add users, ${isLarge?"download the user upload template and fill in emails/names/groups. Much faster than one-by-one for "+ctx.scale+" locations.":"you can add them one at a time or upload a spreadsheet."} Each user gets a role (Buyer, Admin, etc.) and is assigned to a group.`, qr:["What roles are available?","How do I upload users?","show users"] },
+      "groups":       { msg:`Groups are the backbone of your account. ${isLarge?"With "+ctx.scale+" locations, I'd suggest: Root → Regional groups → Location subgroups. This lets you set policies at the regional level.":isMedium?"Create a group for each location or department. Policies and approvals cascade down.":"Start simple — Root plus a few subgroups. You can restructure later."}`, qr:["Can I nest subgroups?","How do policies cascade?","add group"] },
+      "tax":          { msg:isCA?"For Canadian tax exemption, GST (5%) plus PST/HST varies by province. Upload your certificates and qualifying orders are automatically exempt.":"For tax exemption, upload your certificates through ATEP. Supports Resale, Manufacturing, Non-Profit, Government, and Agricultural exemptions.", qr:["How do I upload certificates?","Which categories qualify?"] },
+      "invoicing":    { msg:isCA?"In Canada, PDF is the only legally compliant invoice format. Consolidated invoicing is on the roadmap.":"US invoicing supports cXML (tax-compliant), consolidated invoicing, and PDF. You can configure different formats per group.", qr:["What format should I use?","How does cXML work?"] },
+      "buying":       { msg:`Guided Buying lets you control what employees can purchase — preferred products, restricted categories, spending limits, and seller policies.${isLarge?" With your scale, consider setting up preferred product lists and category restrictions.":""}`, qr:["How do I restrict products?","What is UNSPSC?","Tell me about Business Prime"] },
+      "payments":     { msg:`Payment options include credit/debit cards, Pay By Invoice (Net 30), and ${isCA?"Ghost Cards (no L3 data in CA).":"Ghost Cards, Virtual Cards (pilot), and Small Business Credit Card."} You can assign different methods per group.`, qr:["What is PBI?","Can groups have different payment methods?"] },
+      "analytics":    { msg:`Standard reporting is free for all accounts. For real-time dashboards and spend visibility, you'll need Business Prime.${isLarge?" With "+ctx.scale+" locations, Spend Visibility is really valuable for tracking spend across sites.":""}`, qr:["Do I need Business Prime?","What data is tracked?","Business Prime tiers"] },
+      "integrations": { msg:`Amazon Business integrates with procurement systems via PunchOut (Ariba, Coupa, Oracle), SSO via SAML 2.0, and ERP connectors for SAP, Oracle, Dynamics, and NetSuite.`, qr:["How does PunchOut work?","Setting up SSO?"] },
+    };
+    if (ctx.topic && topicAdvice[ctx.topic]) {
+      const advice = topicAdvice[ctx.topic];
+      parts.push((parts.length ? "<br><br>" : "") + advice.msg);
+      followUp.push(...advice.qr);
+    } else if (ctx.needsGuidance || ctx.businessType || ctx.scale) {
+      parts.push(`<br><br><strong>Here's your game plan:</strong>`);
+      parts.push(`<br>1. <strong>Groups</strong> — ${isLarge?"With "+ctx.scale+" locations, create a group per region or district, then subgroups per location.":isMedium?"Create a group for each location or department.":"Start with a simple structure — you can always add more later."}`);
+      parts.push(`<br>2. <strong>Addresses</strong> — ${isLarge?"Add a shipping address for each location. You can bulk-upload these.":"Add your delivery addresses so orders go to the right place."}`);
+      parts.push(`<br>3. <strong>Approvals</strong> — ${isLarge?"Set spending thresholds per group. Consider regional managers as approvers.":"Set a spending limit so orders above a certain amount need approval."}`);
+      parts.push(`<br>4. <strong>Users</strong> — Invite your team and assign them to the right groups.`);
+      if (isLarge) {
+        parts.push(`<br><br>💡 <strong>Tip:</strong> With ${ctx.scale}+ locations, use the bulk upload templates — they'll save you hours.`);
+        followUp.push("Tell me about bulk uploads");
+      }
+      followUp.push("How do groups work?","How do I add addresses?","How do approvals work?");
+    }
+    if (parts.length) {
+      this.botMsg(parts.join(""));
+      if (followUp.length) this.showQuickReplies(followUp.slice(0, 4));
+      return true;
+    }
+    return false;
+  },
+
+  /* --- Interactive inline form for adding a group --- */
+  _showAddGroupForm() {
+    const el = document.getElementById("chatMessages");
+    const w = document.createElement("div"); w.className = "cd-msg bot";
+    const md = StateStore.state.masterData || {};
+    const groups = md.groups || [];
+    const gs = md.groupSettings || {};
+    // Build existing group options for "copy settings from"
+    const groupOpts = groups.map(g => {
+      const s = gs[g.fullPath];
+      const label = g.name + (s && s.addresses ? ` [${s.addresses}/${s.payments||"—"}]` : "");
+      return `<option value="${g.name}">${label}</option>`;
+    }).join("");
+
+    w.innerHTML = `<div class="cd-avatar">🤖</div><div class="cd-bubble" style="max-width:340px;">
+      <div style="font-weight:600;margin-bottom:8px;">Add a New Group</div>
+      <div style="margin-bottom:6px;">
+        <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:2px;">Group Name <span style="color:#D13212;">*</span></label>
+        <input type="text" id="chatAddGroupName" placeholder="e.g. Store 51" style="width:100%;padding:7px 10px;border:1px solid #CCC;border-radius:4px;font-size:13px;box-sizing:border-box;">
+      </div>
+      <div style="margin-bottom:6px;">
+        <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:2px;">Addresses</label>
+        <select id="chatAddGroupAddr" style="width:100%;padding:6px 8px;border:1px solid #CCC;border-radius:4px;font-size:12px;">
+          <option value="">— None —</option><option value="Shared">Shared</option><option value="Individual">Individual</option><option value="Both">Both</option>
+        </select>
+      </div>
+      <div style="margin-bottom:6px;">
+        <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:2px;">Payments</label>
+        <select id="chatAddGroupPay" style="width:100%;padding:6px 8px;border:1px solid #CCC;border-radius:4px;font-size:12px;">
+          <option value="">— None —</option><option value="Shared">Shared</option><option value="Individual">Individual</option><option value="Both">Both</option>
+        </select>
+      </div>
+      ${groupOpts ? `<div style="margin-bottom:8px;">
+        <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:2px;">Or copy settings from</label>
+        <select id="chatAddGroupCopy" style="width:100%;padding:6px 8px;border:1px solid #CCC;border-radius:4px;font-size:12px;" onchange="ChatPanel._applyCopySettings()">
+          <option value="">— Select group —</option>${groupOpts}
+        </select>
+      </div>` : ""}
+      <div style="display:flex;gap:6px;margin-top:8px;">
+        <button onclick="ChatPanel._submitAddGroupForm()" style="flex:1;background:#E47911;color:#FFF;border:none;padding:8px;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;min-height:36px;">Add Group</button>
+        <button onclick="this.closest('.cd-msg').remove()" style="background:#E0E0E0;color:#232F3E;border:none;padding:8px 14px;border-radius:4px;font-size:13px;cursor:pointer;min-height:36px;">Cancel</button>
+      </div>
+    </div>`;
+    el.appendChild(w); el.scrollTop = el.scrollHeight;
+    setTimeout(() => document.getElementById("chatAddGroupName")?.focus(), 100);
+  },
+
+  _applyCopySettings() {
+    const sel = document.getElementById("chatAddGroupCopy");
+    if (!sel || !sel.value) return;
+    const md = StateStore.state.masterData || {};
+    const groups = md.groups || [];
+    const gs = md.groupSettings || {};
+    const ref = groups.find(g => g.name === sel.value);
+    if (ref && gs[ref.fullPath]) {
+      const s = gs[ref.fullPath];
+      if (s.addresses) document.getElementById("chatAddGroupAddr").value = s.addresses;
+      if (s.payments) document.getElementById("chatAddGroupPay").value = s.payments;
+    }
+  },
+
+  _submitAddGroupForm() {
+    const nameEl = document.getElementById("chatAddGroupName");
+    const addrEl = document.getElementById("chatAddGroupAddr");
+    const payEl = document.getElementById("chatAddGroupPay");
+    const gn = (nameEl?.value || "").trim();
+    if (!gn) { nameEl.style.borderColor = "#D13212"; nameEl.focus(); return; }
+
+    const md = StateStore.state.masterData || {};
+    const root = md.rootGroupPath || "Root";
+    const groups = md.groups || [];
+    if (groups.find(g => (g.name||"").toLowerCase() === gn.toLowerCase())) {
+      this.botMsg(`⚠ Group <strong>${gn}</strong> already exists.`);
+      return;
+    }
+
+    const fullPath = root + "/" + gn;
+    groups.push({ name: gn, fullPath: fullPath, parentPath: root, _addedViaChat: true });
+
+    const addr = addrEl?.value || "";
+    const pay = payEl?.value || "";
+    if (addr || pay) {
+      if (!md.groupSettings) md.groupSettings = {};
+      md.groupSettings[fullPath] = { addresses: addr, payments: pay };
+    }
+
+    StateStore.saveState();
+
+    // Remove the form
+    const form = nameEl.closest(".cd-msg");
+    if (form) form.remove();
+
+    let msg = `✅ Added group <strong>${gn}</strong> (${fullPath}).`;
+    if (addr || pay) msg += `<br>📋 Settings: Addresses = <strong>${addr || "—"}</strong>, Payments = <strong>${pay || "—"}</strong>`;
+    msg += `<br><em>${groups.length} group(s) total.</em>`;
+    this.botMsg(msg);
+    this.showQuickReplies(["Show my groups", "Add another group", "What are group settings?"]);
+  },
+
+  _respond(text, lower) {
+    const md = StateStore.state.masterData || {};
+    const isCA = md.marketplace === "CA";
+    const root = md.rootGroupPath || "Root";
+    const groups = md.groups || [];
+    const _rg = (input) => {
+      if (!input) return root; const l = input.toLowerCase().trim();
+      const e = groups.find(g => (g.fullPath||"").toLowerCase() === l); if (e) return e.fullPath;
+      const n = groups.find(g => (g.name||"").toLowerCase() === l); if (n) return n.fullPath;
+      const p = groups.find(g => (g.name||"").toLowerCase().includes(l)); if (p) return p.fullPath;
+      return input.includes("/") ? input : root + "/" + input;
+    };
+
+    /* --- Data Commands (exact patterns first) --- */
+    const am = text.match(/add\s+(?:user\s+)?(\S+@\S+)\s+(.*?)\s+to\s+(.+)/i);
+    if (am) {
+      const email=am[1],nm=am[2].trim(),gp=_rg(am[3].trim()),pts=nm.split(/\s+/);
+      const sd=StateStore.state.stepData||{}; if(!sd["cat-0"])sd["cat-0"]={users:[],withApprovalAuthority:false}; if(!sd["cat-0"].users)sd["cat-0"].users=[];
+      if(sd["cat-0"].users.find(u=>u.email.toLowerCase()===email.toLowerCase())){this.botMsg(`⚠ <strong>${email}</strong> already exists.`);return;}
+      sd["cat-0"].users.push({email,firstName:pts[0]||"",lastName:pts.slice(1).join(" ")||"",groupPath:gp});
+      if(!StateStore.state.selectedCategories.includes(0))StateStore.state.selectedCategories.push(0);
+      StateStore.saveState(); this.botMsg(`✅ Added <strong>${nm}</strong> (${email}) to <strong>${gp}</strong>. ${sd["cat-0"].users.length} user(s) total.`); return;
+    }
+    if(lower.match(/^(remove|delete)\s+(?:user\s+)?(\S+)/)){
+      const t=text.replace(/^(remove|delete)\s+(?:user\s+)?/i,"").trim().toLowerCase();
+      const us=((StateStore.state.stepData||{})["cat-0"]||{}).users||[];
+      const i=us.findIndex(u=>u.email.toLowerCase()===t||(u.firstName+" "+u.lastName).toLowerCase()===t);
+      if(i>=0){const r=us.splice(i,1)[0];StateStore.saveState();this.botMsg(`✅ Removed <strong>${r.firstName} ${r.lastName}</strong> (${r.email}).`);return;}
+    }
+    if(lower.startsWith("move ")&&lower.includes(" to ")){
+      const mm=text.match(/move\s+(?:user\s+)?(\S+)\s+to\s+(.+)/i);
+      if(mm){const t=mm[1].toLowerCase(),ng=_rg(mm[2].trim()),us=((StateStore.state.stepData||{})["cat-0"]||{}).users||[];
+        const u=us.find(u=>u.email.toLowerCase()===t||(u.firstName+" "+u.lastName).toLowerCase()===t);
+        if(u){const o=u.groupPath;u.groupPath=ng;StateStore.saveState();this.botMsg(`✅ Moved <strong>${u.firstName} ${u.lastName}</strong> from ${o} → <strong>${ng}</strong>.`);return;}}
+    }
+    // Flexible "add group" — matches: "add group X", "add a group X", "add another group X", "add group, X", etc.
+    const addGroupMatch = text.match(/^add\s+(?:a\s+|another\s+|new\s+|one\s+more\s+)?group[,:]?\s*(.*)/i);
+    if (addGroupMatch || (lower.match(/^(?:create|new)\s+group[,:]?\s*/i))) {
+      const rawAfter = addGroupMatch ? addGroupMatch[1].trim() : text.replace(/^(?:create|new)\s+group[,:]?\s*/i, "").trim();
+
+      // If no name provided, show interactive inline form
+      if (!rawAfter) {
+        this._showAddGroupForm();
+        return;
+      }
+
+      // Extract group name — support quoted names, or text before "with"/"like"/"same"
+      let gn, settingsPart = "";
+      // Try quoted name first: "Store 51" or 'Store 51'
+      const quotedMatch = rawAfter.match(/^[""\u201C\u201D'](.+?)[""\u201C\u201D']\s*(.*)/);
+      if (quotedMatch) { gn = quotedMatch[1].trim(); settingsPart = quotedMatch[2].trim(); }
+      else {
+        // Try "Name with/like/same ..."
+        const withMatch = rawAfter.match(/^(.+?)\s+(?:with|like|same|using|copy)\s+(.*)/i);
+        if (withMatch) { gn = withMatch[1].replace(/^[,\s]+|[,\s]+$/g, "").trim(); settingsPart = withMatch[2].trim(); }
+        else { gn = rawAfter.replace(/^[,\s]+|[,\s]+$/g, "").replace(/^["']|["']$/g, "").trim(); }
+      }
+
+      if (!gn) { this.botMsg(`⚠ Please provide a group name. Example: <strong>add group "Store 51" with same settings</strong>`); return; }
+      if (groups.find(g => (g.name||"").toLowerCase() === gn.toLowerCase())) { this.botMsg(`⚠ Group <strong>${gn}</strong> already exists.`); return; }
+
+      const fullPath = root + "/" + gn;
+      groups.push({ name: gn, fullPath: fullPath, parentPath: root, _addedViaChat: true });
+
+      // Resolve group settings
+      const gs = md.groupSettings || {};
+      let addr = "", pay = "";
+      const settingsLower = settingsPart.toLowerCase();
+
+      if (settingsLower.match(/same\s*(?:group\s*)?setting|same\s+as\s+other|copy\s+setting|same\s+config|same$/)) {
+        // Copy from the most recently added group (last one before this new one)
+        const lastGroup = groups.length > 1 ? groups[groups.length - 2] : null;
+        if (lastGroup && gs[lastGroup.fullPath]) {
+          addr = gs[lastGroup.fullPath].addresses || "";
+          pay = gs[lastGroup.fullPath].payments || "";
+        } else {
+          const anyPath = Object.keys(gs).find(k => gs[k].addresses || gs[k].payments);
+          if (anyPath) { addr = gs[anyPath].addresses || ""; pay = gs[anyPath].payments || ""; }
+        }
+      } else if (settingsLower.match(/like\s+|same\s+as\s+|copy\s+from\s+/)) {
+        const refName = settingsPart.replace(/^(?:like|same\s+as|copy\s+from)\s+/i, "").replace(/["']/g, "").trim();
+        const refGroup = groups.find(g => (g.name||"").toLowerCase() === refName.toLowerCase());
+        if (refGroup && gs[refGroup.fullPath]) {
+          addr = gs[refGroup.fullPath].addresses || "";
+          pay = gs[refGroup.fullPath].payments || "";
+        }
+      } else if (settingsLower.match(/shared|individual|both/)) {
+        const addrMatch = settingsLower.match(/(shared|individual|both)\s*address/);
+        const payMatch = settingsLower.match(/(shared|individual|both)\s*payment/);
+        if (addrMatch) addr = addrMatch[1].charAt(0).toUpperCase() + addrMatch[1].slice(1);
+        if (payMatch) pay = payMatch[1].charAt(0).toUpperCase() + payMatch[1].slice(1);
+        if (!addrMatch && !payMatch) {
+          const singleMatch = settingsLower.match(/(shared|individual|both)/);
+          if (singleMatch) { const v = singleMatch[1].charAt(0).toUpperCase() + singleMatch[1].slice(1); addr = v; pay = v; }
+        }
+      }
+
+      if (addr || pay) {
+        if (!md.groupSettings) md.groupSettings = {};
+        md.groupSettings[fullPath] = { addresses: addr, payments: pay };
+      }
+
+      StateStore.saveState();
+
+      let msg = `✅ Added group <strong>${gn}</strong> (${fullPath}).`;
+      if (addr || pay) {
+        msg += `<br>📋 Settings: Addresses = <strong>${addr || "—"}</strong>, Payments = <strong>${pay || "—"}</strong>`;
+      }
+      msg += `<br><em>${groups.length} group(s) total.</em>`;
+      this.botMsg(msg);
+      this.showQuickReplies(["Show my groups", "Add another group", "What are group settings?"]);
+      return;
+    }
+    // Flexible "remove/delete group(s)" — single, multiple, or range
+    if(lower.match(/^(?:remove|delete)\s+(?:a\s+|the\s+)?groups?[,:]?\s+/i)){
+      const raw = text.replace(/^(?:remove|delete)\s+(?:a\s+|the\s+)?groups?[,:]?\s+/i, "").trim();
+
+      // Check for range pattern: "Store 40" through "Store 51" or Store 40 - Store 51
+      const rangeMatch = raw.match(/[""\u201C]?(.+?)[""\u201D]?\s+(?:through|thru|to|-|–)\s+[""\u201C]?(.+?)[""\u201D]?\s*$/i);
+      if (rangeMatch) {
+        const startName = rangeMatch[1].trim();
+        const endName = rangeMatch[2].trim();
+        // Extract numeric suffix pattern: "Store 40" → prefix="Store ", start=40
+        const startNum = startName.match(/^(.+?)(\d+)$/);
+        const endNum = endName.match(/^(.+?)(\d+)$/);
+        if (startNum && endNum && startNum[1].trim().toLowerCase() === endNum[1].trim().toLowerCase()) {
+          const prefix = startNum[1];
+          const from = parseInt(startNum[2]);
+          const to = parseInt(endNum[2]);
+          const lo = Math.min(from, to), hi = Math.max(from, to);
+          let removed = 0, notFound = [];
+          const us = ((StateStore.state.stepData||{})["cat-0"]||{}).users||[];
+          let orphanCount = 0;
+          for (let n = lo; n <= hi; n++) {
+            const name = prefix + n;
+            const idx = groups.findIndex(g => (g.name||"").toLowerCase() === name.toLowerCase());
+            if (idx >= 0) {
+              const g = groups.splice(idx, 1)[0];
+              if (md.groupSettings && md.groupSettings[g.fullPath]) delete md.groupSettings[g.fullPath];
+              const orphaned = us.filter(u => u.groupPath === g.fullPath);
+              if (orphaned.length) { orphaned.forEach(u => { u.groupPath = root; }); orphanCount += orphaned.length; }
+              removed++;
+            } else { notFound.push(name); }
+          }
+          StateStore.saveState();
+          let msg = `✅ Removed <strong>${removed}</strong> group(s): ${prefix}${lo} through ${prefix}${hi}.`;
+          if (notFound.length && notFound.length <= 5) msg += `<br>⚠ Not found: ${notFound.join(", ")}`;
+          else if (notFound.length > 5) msg += `<br>⚠ ${notFound.length} group(s) were not found.`;
+          if (orphanCount) msg += `<br>⚠ ${orphanCount} user(s) moved to <strong>${root}</strong>.`;
+          msg += `<br><em>${groups.length} group(s) remaining.</em>`;
+          this.botMsg(msg);
+          this.showQuickReplies(["Show my groups", "Show my users"]);
+          return;
+        }
+      }
+
+      // Check for comma-separated list: "Store 1", "Store 2", "Store 3"
+      const commaNames = raw.split(/[,;]\s*/).map(s => s.replace(/^["'\u201C\u201D\s]+|["'\u201C\u201D\s]+$/g, "").trim()).filter(Boolean);
+      if (commaNames.length > 1) {
+        let removed = 0, notFound = [];
+        const us = ((StateStore.state.stepData||{})["cat-0"]||{}).users||[];
+        let orphanCount = 0;
+        commaNames.forEach(name => {
+          const idx = groups.findIndex(g => (g.name||"").toLowerCase() === name.toLowerCase());
+          if (idx >= 0) {
+            const g = groups.splice(idx, 1)[0];
+            if (md.groupSettings && md.groupSettings[g.fullPath]) delete md.groupSettings[g.fullPath];
+            const orphaned = us.filter(u => u.groupPath === g.fullPath);
+            if (orphaned.length) { orphaned.forEach(u => { u.groupPath = root; }); orphanCount += orphaned.length; }
+            removed++;
+          } else { notFound.push(name); }
+        });
+        StateStore.saveState();
+        let msg = `✅ Removed <strong>${removed}</strong> group(s).`;
+        if (notFound.length) msg += `<br>⚠ Not found: ${notFound.join(", ")}`;
+        if (orphanCount) msg += `<br>⚠ ${orphanCount} user(s) moved to <strong>${root}</strong>.`;
+        msg += `<br><em>${groups.length} group(s) remaining.</em>`;
+        this.botMsg(msg);
+        this.showQuickReplies(["Show my groups", "Show my users"]);
+        return;
+      }
+
+      // Single group removal
+      const gn = raw.replace(/^["'\u201C\u201D]|["'\u201C\u201D]$/g, "").trim();
+      const idx = groups.findIndex(g => (g.name||"").toLowerCase() === gn.toLowerCase() || (g.fullPath||"").toLowerCase() === gn.toLowerCase());
+      if (idx < 0) { this.botMsg(`⚠ Group <strong>${gn}</strong> not found. Type <strong>show groups</strong> to see your groups.`); return; }
+      const removed = groups.splice(idx, 1)[0];
+      if (md.groupSettings && md.groupSettings[removed.fullPath]) delete md.groupSettings[removed.fullPath];
+      const us = ((StateStore.state.stepData||{})["cat-0"]||{}).users||[];
+      const orphaned = us.filter(u => u.groupPath === removed.fullPath);
+      if (orphaned.length) orphaned.forEach(u => { u.groupPath = root; });
+      StateStore.saveState();
+      let rmsg = `✅ Removed group <strong>${removed.name}</strong> (${removed.fullPath}).`;
+      if (orphaned.length) rmsg += `<br>⚠ ${orphaned.length} user(s) moved to <strong>${root}</strong>.`;
+      rmsg += `<br><em>${groups.length} group(s) remaining.</em>`;
+      this.botMsg(rmsg);
+      this.showQuickReplies(["Show my groups", "Show my users"]);
+      return;
+    }
+    if(lower.match(/^set\s+group\s+settings?\s+/i) || lower.match(/^update\s+group\s+settings?\s+/i)){
+      // set group settings "Store 1" shared addresses individual payments
+      const raw = text.replace(/^(?:set|update)\s+group\s+settings?\s+/i, "").trim();
+      const quotedMatch = raw.match(/^["'](.+?)["']\s+(.*)/);
+      let gn, settingsPart;
+      if (quotedMatch) { gn = quotedMatch[1]; settingsPart = quotedMatch[2]; }
+      else { const parts = raw.match(/^(\S+)\s+(.*)/); if (parts) { gn = parts[1]; settingsPart = parts[2]; } else { gn = raw; settingsPart = ""; } }
+      const target = groups.find(g => (g.name||"").toLowerCase() === gn.toLowerCase());
+      if (!target) { this.botMsg(`⚠ Group <strong>${gn}</strong> not found.`); return; }
+      if (!md.groupSettings) md.groupSettings = {};
+      const existing = md.groupSettings[target.fullPath] || { addresses: "", payments: "" };
+      const sl = settingsPart.toLowerCase();
+      const am = sl.match(/(shared|individual|both)\s*address/);
+      const pm = sl.match(/(shared|individual|both)\s*payment/);
+      if (am) existing.addresses = am[1].charAt(0).toUpperCase() + am[1].slice(1);
+      if (pm) existing.payments = pm[1].charAt(0).toUpperCase() + pm[1].slice(1);
+      if (!am && !pm) { const s = sl.match(/(shared|individual|both)/); if (s) { const v = s[1].charAt(0).toUpperCase() + s[1].slice(1); existing.addresses = v; existing.payments = v; } }
+      md.groupSettings[target.fullPath] = existing;
+      StateStore.saveState();
+      this.botMsg(`✅ Updated <strong>${target.name}</strong> settings:<br>Addresses = <strong>${existing.addresses || "—"}</strong>, Payments = <strong>${existing.payments || "—"}</strong>`);
+      return;
+    }
+    if(lower.match(/^(?:show|list|display|view)\s+(?:my\s+|all\s+|the\s+)?users$/)){
+      const us=((StateStore.state.stepData||{})["cat-0"]||{}).users||[];
+      if(!us.length){this.botMsg("No users yet. Try: <strong>add user jane@acme.com Jane Doe to Finance</strong>");return;}
+      let h=`<strong>${us.length} user(s):</strong><br><table class="cd-table"><tr><th>Email</th><th>Name</th><th>Group</th></tr>`;
+      us.forEach(u=>{h+=`<tr><td>${u.email}</td><td>${u.firstName} ${u.lastName}</td><td>${u.groupPath}</td></tr>`;});
+      this.botMsg(h+`</table>`);return;
+    }
+    if(lower.match(/^(?:show|list|display|view)\s+(?:my\s+|all\s+|the\s+)?groups$/)){
+      const gs = md.groupSettings || {};
+      let h=`<strong>Groups under ${root}:</strong><br>• ${root} (root)<br>`;
+      groups.forEach(g=>{
+        const s = gs[g.fullPath];
+        h += `• ${g.fullPath}`;
+        if (s && (s.addresses || s.payments)) h += ` <span style="color:#888;font-size:12px;">[Addr: ${s.addresses||"—"}, Pay: ${s.payments||"—"}]</span>`;
+        h += `<br>`;
+      });
+      this.botMsg(h);
+      this.showQuickReplies(["Add another group","What are group settings?"]);
+      return;
+    }
+    if(lower==="help"){
+      this.botMsg(`<strong>📝 Data Commands:</strong><br>• <strong>add user email Name to Group</strong><br>• <strong>remove user email</strong><br>• <strong>move user email to Group</strong><br>• <strong>add group "Name"</strong> — also supports <strong>with same settings</strong>, <strong>like GroupName</strong>, or <strong>with shared addresses</strong><br>• <strong>remove group "Name"</strong><br>• <strong>set group settings "Name" shared</strong><br>• <strong>show users</strong> / <strong>show groups</strong><br><br><strong>❓ Ask about:</strong> groups, group settings, approvals, BOI, guided buying, tax exemption, invoicing, bulk uploads, Business Prime, US vs CA, payments, SSO, analytics, and more.`);return;
+    }
+
+    /* --- Extract conversational context --- */
+    const ctx = this._extractContext(text, lower);
+
+    /* --- Handle conversational / situational questions --- */
+    if (ctx.needsGuidance || ctx.businessType || ctx.scale) {
+      if (this._respondConversational(text, lower, ctx, md, isCA, root, groups)) return;
+    }
+
+    /* --- Q&A: scored intent matching (best match wins) --- */
+    const intents = [
+      { kw:["bulk upload","upload template","upload spreadsheet","bulk import","import template","upload file"], reply:()=>`<strong>Bulk Upload</strong> lets you add many records at once. On each configuration step, look for the <strong>📥 Download Template</strong> button — download the spreadsheet, fill in your data, then click <strong>📤 Upload</strong> to import it. Works for users, addresses, groups, and more.`, qr:["How do I add users?","How do I add addresses?","Tell me about groups"] },
+      { kw:["group setting","address visibility","payment visibility","shared address","individual address","shared payment","individual payment"], reply:()=>`<strong>Group Settings</strong> control how addresses and payments are shared within each group. After adding groups, expand the <strong>Group Settings</strong> panel below the group list. For each group, choose:<br>• <strong>Shared</strong> — everyone in the group sees the same addresses/payments<br>• <strong>Individual</strong> — each user manages their own<br>• <strong>Both</strong> — users see shared options plus their own<br><br>Use the "Apply to All" buttons to set them in bulk.`, qr:["How do groups work?","How do I add addresses?","What are the roles?"] },
+      { kw:["template","download template","spreadsheet","excel","xlsx"], reply:()=>`Each configuration step has a <strong>📥 Download Template</strong> button that gives you a pre-formatted spreadsheet. Fill it in with your data, then use <strong>📤 Upload</strong> to import. Templates are available for users, addresses, approvals, and more.`, qr:["How do I bulk upload?","How do I add users?","How do I add addresses?"] },
+      { kw:["essential","must have","where do i start","what order","what should i","set up first","configure first","getting started","begin","first thing","priority"], reply:()=>`<strong>The Six Core Essentials</strong> — configure in this order:<br>1. <strong>Group Structures</strong><br>2. <strong>Guided Buying</strong><br>3. <strong>Approvals</strong><br>4. <strong>Addresses</strong><br>5. <strong>Tax Exemption</strong><br>6. <strong>User Templates</strong><br><br>Then add: Checkout Defaults, Prefer Lists, Account Authority/SSO, Business Analytics.`, qr:["Tell me about groups","How do approvals work?","What is guided buying?"] },
+      { kw:["group hierarchy","group structure","org structure","how do groups","what are groups","tell me about groups","how many groups","nest subgroup","subgroup"], reply:()=>`<strong>Groups</strong> use a 3-level hierarchy: Root → Legal Entity → Subgroups. They're the backbone of all policy enforcement, approvals, and reporting. Each group can have its own addresses, payment methods, and approval chains.`, qr:["How many groups do I need?","What are group settings?","Show my groups"] },
+      { kw:["role","permission","rbac","admin role","buyer role","who can"], reply:()=>`<strong>Roles:</strong> Administrator (full access), Buyer (browse/purchase), IT (SSO/integrations), Accounting (payments/invoicing). Configurable permissions with RBAC through the hierarchy.`, qr:["How do I add users?","What can buyers do?","Tell me about approvals"] },
+      { kw:["approval","spending limit","workflow","approve order","threshold","sign off"], reply:()=>`<strong>Approvals:</strong> Up to 6 levels, 10 approvers per level, configurable spending thresholds, line-item approval, 3-day reminders, delegation, RFI capability. Full parity US+CA.`, qr:["What threshold should I set?","Can I have multiple approvers?","What about spending limits?"] },
+      { kw:["guided buying","buying polic","restrict","block product","seller polic","control what","limit what"], reply:()=>`<strong>Guided Buying:</strong> Spending limits, preferred products, restricted/blocked items, UNSPSC category controls, seller policies, Climate Pledge Friendly. Advanced blocking requires Enterprise Business Prime.`, qr:["How do I restrict products?","What is UNSPSC?","Tell me about Business Prime"] },
+      { kw:["boi","business order information","checkout field","po number","cost center","gl code","custom field"], reply:()=>`<strong>BOI</strong> fields collect data at checkout — PO numbers, cost centers, GL codes. Define at root or group level, with free-form or preset options.`, qr:["Should I make fields required?","Root vs group level?","What fields do most companies use?"] },
+      { kw:["bpo","blanket purchase","budget","spending budget","pre-approve"], reply:()=>`<strong>BPO/Budget:</strong> Time-bound budgets with hard/soft limits, per group or user, auto-credit on returns, mobile access, bulk upload. Full parity US+CA.`, qr:["Hard vs soft limits?","How do I set a budget?","Can users see remaining budget?"] },
+      { kw:["business prime","prime tier","prime plan","prime cost","prime pricing"], reply:()=>`<strong>Business Prime:</strong> Essentials (~$179/$109CDN), Small (~$499), Medium (~$1,299), Enterprise (~$10,099). Unlocks Spend Visibility + advanced Guided Buying. Separate memberships per marketplace.`, qr:["Which tier do I need?","What does Enterprise unlock?","Is Prime required?"] },
+      { kw:["tax exempt","atep","tax free","sales tax","gst","hst","pst"], reply:()=>isCA?`<strong>Tax Exemption (CA):</strong> GST (5%) + PST/HST varies by province. EHF on electronics. First Nations uses PBI write-off workaround.`:`<strong>Tax Exemption (US):</strong> ATEP supports Resale, Manufacturing, Non-Profit, Government, Agricultural. Upload your certificates and qualifying orders are automatically tax-free.`, qr:["How do I upload certificates?","Which categories qualify?","Does it work for all sellers?"] },
+      { kw:["invoice","cxml","reconcil","billing","receipt"], reply:()=>isCA?`<strong>Invoicing (CA):</strong> ⚠ PDF only legal format. cXML not tax-compliant. Consolidated Invoicing on roadmap.`:`<strong>Invoicing (US):</strong> Tax-compliant cXML, consolidated invoicing, IBA, and PDF. Configurable per group.`, qr:["What format should I use?","Can I consolidate invoices?","How does cXML work?"] },
+      { kw:["payment","pay by invoice","pbi","ghost card","virtual card","credit card","how to pay","payment method"], reply:()=>`<strong>Payments:</strong> Credit/debit (US+CA), PBI Net 30 (US+CA), Virtual Cards (US pilot), Ghost Cards (US+L3, CA no L3), SB Credit Card (US only). You can assign different payment methods per group.`, qr:["What is PBI?","Ghost card vs virtual card?","Can groups have different methods?"] },
+      { kw:["sso","punchout","erp","integrat","saml","ariba","coupa","oracle","sap","procurement system"], reply:()=>`<strong>Integrations:</strong> PunchOut (cXML/OCI) with Ariba, Coupa, Oracle. SSO via SAML 2.0. ERP: SAP, Oracle, Dynamics, NetSuite. BWS APIs. All US+CA except tax-compliant cXML.`, qr:["How does PunchOut work?","Setting up SSO?","Which ERPs are supported?"] },
+      { kw:["analytics","spend visibility","reporting","report","dashboard","track spending","spend data"], reply:()=>`<strong>Analytics:</strong> Standard (all): downloadable reports. Spend Visibility (Business Prime): QuickSight dashboards, refreshed every 4 hours.${isCA?" CA: some data gaps.":""}`, qr:["Do I need Business Prime for reports?","What data is tracked?","How often do dashboards refresh?"] },
+      { kw:["canada","difference","comparison","canadian","marketplace"], reply:()=>`<strong>US vs CA:</strong> Full parity on groups, approvals, guided buying, BPO, PBI, SSO, analytics. CA gaps: no tax-compliant cXML, no virtual cards, no L3 data, no consolidated invoicing, First Nations tax workaround only.`, qr:["Can I have both US and CA?","What's missing in CA?","How do I register in CA?"] },
+      { kw:["account authority","domain claim","shadow account","email domain"], reply:()=>`<strong>Account Authority</strong> protects your email domain so employees can't create rogue accounts. For dual-marketplace, put it in the primary marketplace.`, qr:["How do I claim my domain?","What happens to existing accounts?"] },
+      { kw:["delivery","shipping","carrier","delivery hours","delivery window"], reply:()=>`<strong>Delivery:</strong> Manage Your Deliveries for days/hours/holidays — AMZL only. Carrier de-prioritization per address.${isCA?" CA: remote areas may have longer windows.":""}`, qr:["Can I set delivery hours?","How do I restrict carriers?"] },
+      { kw:["quote","rfq","bulk purchase","large order","negotiate","custom pricing"], reply:()=>`<strong>Custom Quote Engine</strong> for bulk purchases ($10K+). Submit RFQ, compare quotes, negotiate, convert to PO. Both US+CA.`, qr:["What's the minimum order?","How long do quotes take?"] },
+      { kw:["checkout default","default payment","default address","default shipping"], reply:()=>`<strong>Checkout Defaults</strong> set default payment, shipping speed, and address to reduce friction. Buyers can still override at checkout.`, qr:["Can I set defaults per group?","What shipping speeds are available?"] },
+      { kw:["digital room","landing page","branded page","custom page"], reply:()=>`<strong>Digital Room</strong> is a branded landing page with custom messaging and your logo.`, qr:["How do I set it up?","Can I customize the messaging?"] },
+      { kw:["highlight","preferred product","preferred brand","asin","favorite product"], reply:()=>`<strong>Preferred Products & Brands</strong> highlight specific ASINs or brands for buyers.`, qr:["How do I add ASINs?","Can I highlight by brand?"] },
+      { kw:["register","sign up","create account","new account","get started with amazon"], reply:()=>`<strong>Registration:</strong> business.amazon.com (US) or business.amazon.ca (CA). Separate accounts per marketplace. Use "+" email modifier for dual accounts.`, qr:["Can I use my personal Amazon account?","How long does verification take?"] },
+      { kw:["how many","how much","cost","price","pricing","how long","timeline","timeframe"], reply:()=>null },
+    ];
+
+    // US vs CA word-boundary check
+    if (/\bus\b/.test(lower) && /\bca\b/.test(lower)) {
+      this.botMsg(`<strong>US vs CA:</strong> Full parity on groups, approvals, guided buying, BPO, PBI, SSO, analytics. CA gaps: no tax-compliant cXML, no virtual cards, no L3 data, no consolidated invoicing, First Nations tax workaround only.`);
+      this.showQuickReplies(["Can I have both US and CA?","What's missing in CA?","How do I register in CA?"]);
+      return;
+    }
+
+    let bestIntent = null, bestScore = 0;
+    for (const intent of intents) {
+      let score = 0;
+      for (const k of intent.kw) { if (lower.includes(k)) score++; }
+      if (score > bestScore) { bestScore = score; bestIntent = intent; }
+    }
+    if (bestIntent && bestScore >= 1) {
+      const r = bestIntent.reply();
+      if (r) { this.botMsg(r); if (bestIntent.qr) this.showQuickReplies(bestIntent.qr); return; }
+    }
+
+    /* --- Fallback: context-aware with suggestions --- */
+    const cs = StepManager.getCurrentStep() ? StepManager.getCurrentStep().id : "";
+    const stepAdvice = {
+      "welcome":  { msg:"You're on the <strong>Welcome</strong> step. Set up your company info, define your group structure, and pick which features to configure.", qr:["What should I set up first?","How many groups do I need?","help"] },
+      "cat-0":    { msg:"You're setting up <strong>Users & Groups</strong>. Upload a spreadsheet or add users one by one.", qr:["How do I add users?","What roles are available?","show users"] },
+      "cat-1":    { msg:"You're configuring <strong>Shipping Addresses</strong>. Each address gets assigned to a group — don't forget the phone number.", qr:["Can groups share addresses?","How many addresses can I add?"] },
+      "cat-2":    { msg:"You're setting up <strong>BOI checkout fields</strong> — custom fields buyers fill in at checkout like PO numbers or cost centers.", qr:["What fields should I add?","Required vs optional?","What is BOI?"] },
+      "cat-3":    { msg:"You're configuring <strong>Spending Approvals</strong>. Start simple — a single threshold with one approver — and add complexity later.", qr:["What threshold should I set?","How many approval levels?","How do approvals work?"] },
+      "cat-4":    { msg:"You're setting up <strong>Invoicing</strong>. "+(isCA?"In Canada, PDF is the only legally compliant format.":"US supports cXML, consolidated invoicing, and PDF."), qr:["What format should I use?","Can I consolidate invoices?"] },
+      "review":   { msg:"You're on the <strong>Review</strong> step. Double-check your summary, then hit Generate to create your template.", qr:["What should I set up first?","Can I go back and edit?"] },
+    };
+    if (stepAdvice[cs]) {
+      this.botMsg(`I'm not sure I caught that, but I can help! ${stepAdvice[cs].msg}`);
+      this.showQuickReplies(stepAdvice[cs].qr);
+      return;
+    }
+
+    this.botMsg(`I didn't quite catch that. I can help with any Amazon Business feature — try asking about a specific topic, or pick one below.`);
+    this.showQuickReplies(["What should I set up first?","How do approvals work?","Tell me about groups","help"]);
+  }
+};
+
+/* Gate: show FAB only after Welcome step is completed */
+function updateChatFabVisibility() {
+  // Always visible once the wizard page is loaded
+  const fab = document.getElementById("chatFab");
+  if (fab) fab.style.display = "flex";
+}
+const _origGoNext = StepManager.goNext.bind(StepManager);
+StepManager.goNext = function() { _origGoNext(); updateChatFabVisibility(); };
+const _origGoBack = StepManager.goBack.bind(StepManager);
+StepManager.goBack = function() { _origGoBack(); updateChatFabVisibility(); };
+setTimeout(() => updateChatFabVisibility(), 1000);
+</script>
+
 </body>
 </html>
-THIS_IS_A_MARKER_TO_FIND
